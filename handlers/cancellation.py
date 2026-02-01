@@ -207,14 +207,17 @@ async def refund_card_entered(message: Message, state: FSMContext):
     data = await state.get_data()
     order_number = data.get("order_number")
     
+    # Получаем заказ перед обновлением
+    order = await db.get_order(order_number)
+    
     # Обновление статуса заказа
     await db.update_order_status(order_number, "cancelled", refund_card=card_number)
     
     # Обновление в Google Sheets
-    sheets.update_order_status(order_number, "cancelled", refund_card=card_number)
+    refund_amount = order.get('total_price', 0) if order else 0
+    sheets.update_order_status(order_number, "cancelled", order=order, refund_amount=refund_amount)
     
     # Уведомление администраторов
-    order = await db.get_order(order_number)
     admin_text = (
         f"📋 Заказ №{order_number} — отмена, требуется возврат средств\n\n"
         f"Номер карты: {card_number}\n"

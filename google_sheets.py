@@ -51,85 +51,137 @@ class GoogleSheets:
             return
         
         headers = [
-            "Статус",
-            "Номер заказа",
-            "Дата самовывоза",
-            "Время самовывоза",
-            "Фамилия",
-            "Имя",
-            "Ник в Telegram",
-            "Варианты букетов",
-            "Количество тюльпанов",
-            "Количество букетов",
-            "Сумма заказа",
-            "Оплата",
-            "Дата создания",
-            "Номер карты для возврата"
+            "статус",
+            "№ заказа",
+            "Дата и время",
+            "Фамилия, Имя",
+            "@ телеграм",
+            "№ варианта",
+            "кол-во букетов",
+            "кол-во тюльпанов",
+            "итого тюльпанов",
+            "сумма",
+            "оплата",
+            "возврат"
         ]
         
         self.worksheet.append_row(headers)
     
     def add_order(self, order: Dict):
-        """Добавить заказ в таблицу"""
+        """Добавить заказ в таблицу (создает несколько строк - по одной на каждый вариант букета)"""
         if not self.worksheet:
             print("Warning: Google Sheets not connected")
             return
         
-        # Форматирование вариантов букетов
-        bouquets_info = []
-        for bouquet in order.get("bouquets", []):
-            variant_name = bouquet.get("variant_name", "")
-            quantity = bouquet.get("quantity", 0)
-            count = bouquet.get("count", 0)
-            bouquets_info.append(f"{variant_name} - {quantity} шт. - {count} букет")
+        order_number = order.get("order_number", "")
         
-        bouquets_str = "; ".join(bouquets_info)
+        # Проверяем, не существует ли уже заказ в таблице
+        try:
+            existing_cells = self.worksheet.findall(order_number)
+            if existing_cells:
+                print(f"Order {order_number} already exists in sheet, skipping add")
+                return
+        except:
+            pass  # Если не найдено, продолжаем
         
-        # Подсчет общего количества букетов
-        total_bouquets = sum(b.get("count", 0) for b in order.get("bouquets", []))
+        # Общие данные заказа
+        status = order.get("status", "pending_payment")
+        pickup_date = order.get("pickup_date", "")
+        pickup_time = order.get("pickup_time", "")
+        # Объединяем дату и время: "7 марта, 10:00"
+        date_time = f"{pickup_date}, {pickup_time}" if pickup_date and pickup_time else ""
         
-        row = [
-            order.get("status", "pending_payment"),
-            order.get("order_number", ""),
-            order.get("pickup_date", ""),
-            order.get("pickup_time", ""),
-            order.get("last_name", ""),
-            order.get("first_name", ""),
-            order.get("username", ""),
-            bouquets_str,
-            f"{order.get('bouquets', [{}])[0].get('quantity', '')} шт." if order.get("bouquets") else "",
-            total_bouquets,
-            order.get("total_price", 0),
-            "Да" if order.get("status") == "paid" else "Нет",
-            order.get("created_at", ""),
-            order.get("refund_card", "")
-        ]
+        # Объединяем фамилию и имя: "Иванов Иван"
+        full_name = f"{order.get('last_name', '')} {order.get('first_name', '')}".strip()
         
-        self.worksheet.append_row(row)
+        # Форматируем username: добавляем "@" если его нет
+        username = order.get("username", "")
+        if username and not username.startswith("@"):
+            username = f"@{username}"
+        
+        total_price = order.get("total_price", 0)
+        
+        # Определяем статус для отображения
+        status_display = "оплачен" if status == "paid" else "отменен" if status == "cancelled" else "ожидает оплаты"
+        
+        # Сумма оплаты (равна сумме заказа, если оплачен)
+        payment_amount = total_price if status == "paid" else 0
+        
+        # Создаем строку для каждого варианта букета
+        rows_to_add = []
+        bouquets = order.get("bouquets", [])
+        
+        for bouquet in bouquets:
+            variant_num = bouquet.get("variant", "")
+            count = bouquet.get("count", 0)  # количество букетов этого варианта
+            quantity = bouquet.get("quantity", 0)  # количество тюльпанов в букете
+            total_tulips = count * quantity  # итого тюльпанов для этого варианта
+            
+            row = [
+                status_display,
+                order_number,
+                date_time,
+                full_name,
+                username,
+                variant_num,
+                count,
+                quantity,
+                total_tulips,
+                total_price,  # общая сумма заказа (повторяется для всех строк)
+                payment_amount,  # сумма оплаты (повторяется для всех строк)
+                ""  # возврат (пусто по умолчанию)
+            ]
+            rows_to_add.append(row)
+        
+        # Добавляем все строки заказа
+        if rows_to_add:
+            self.worksheet.append_rows(rows_to_add)
     
     def update_order_status(self, order_number: str, status: str, **kwargs):
-        """Обновить статус заказа в таблице"""
+        """Обновить статус заказа в таблице (обновляет все строки заказа)"""
         if not self.worksheet:
             return
         
         try:
-            # Найти строку с номером заказа
-            cell = self.worksheet.find(order_number)
-            if cell:
+            # Найти все строки с номером заказа (заказ может занимать несколько строк)
+            cells = self.worksheet.findall(order_number)
+            if not cells:
+                print(f"Order {order_number} not found in sheet")
+                return
+            
+            # Определяем статус для отображения
+            status_display = "оплачен" if status == "paid" else "отменен" if status == "cancelled" else "ожидает оплаты"
+            
+            # Получаем данные заказа для обновления суммы оплаты
+            order = kwargs.get("order")
+            if order:
+                total_price = order.get("total_price", 0)
+                payment_amount = total_price if status == "paid" else 0
+            else:
+                # Если заказ не передан, пытаемся получить сумму из существующих строк
+                first_row = cells[0].row
+                try:
+                    total_price = self.worksheet.cell(first_row, 10).value  # колонка "сумма"
+                    payment_amount = total_price if status == "paid" else 0
+                except:
+                    payment_amount = 0
+            
+            refund_amount = kwargs.get("refund_amount", "")
+            
+            # Обновляем все строки заказа
+            for cell in cells:
                 row = cell.row
-                # Обновить статус (колонка A)
-                self.worksheet.update_cell(row, 1, status)
+                # Обновить статус (колонка 1)
+                self.worksheet.update_cell(row, 1, status_display)
                 
-                # Обновить оплату (колонка L)
-                if status == "paid":
-                    self.worksheet.update_cell(row, 12, "Да")
-                elif status == "cancelled":
-                    self.worksheet.update_cell(row, 12, "Отменено")
+                # Обновить сумму оплаты (колонка 11)
+                self.worksheet.update_cell(row, 11, payment_amount)
                 
-                # Обновить номер карты для возврата если есть
-                if kwargs.get("refund_card"):
-                    self.worksheet.update_cell(row, 14, kwargs["refund_card"])
-        except gspread.exceptions.CellNotFound:
-            print(f"Order {order_number} not found in sheet")
+                # Обновить возврат (колонка 12) если есть
+                if refund_amount:
+                    self.worksheet.update_cell(row, 12, refund_amount)
+                    
+        except Exception as e:
+            print(f"Error updating order {order_number} in sheet: {e}")
 
 
