@@ -115,6 +115,10 @@ class Database:
         # Сохраняем существующие данные пользователя (например, consent_given)
         existing_user = users.get(str(user_id), {})
         
+        # Если у пользователя уже есть согласие, сохраняем его (не перезаписываем на False)
+        if existing_user.get("consent_given") and "consent_given" not in user_data:
+            user_data["consent_given"] = True
+        
         users[str(user_id)] = {
             **existing_user,  # Сохраняем существующие данные
             **user_data,      # Обновляем новыми данными

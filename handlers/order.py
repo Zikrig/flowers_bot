@@ -29,6 +29,7 @@ class OrderStates(StatesGroup):
     selecting_date = State()  # Выбор даты самовывоза
     selecting_time = State()  # Выбор времени самовывоза
     entering_name = State()  # Ввод имени и фамилии
+    entering_phone = State()  # Ввод номера телефона
     confirming_order = State()  # Подтверждение заказа
     waiting_payment = State()  # Ожидание оплаты
     waiting_receipt = State()  # Ожидание отправки чека через кнопку
@@ -56,6 +57,12 @@ async def show_bouquet_selection(message_or_callback, state: FSMContext):
             if hasattr(message_or_callback, 'message'):
                 await message_or_callback.message.answer("Ошибка: не удалось определить пользователя.")
             return
+    
+    # Проверяем, является ли пользователь администратором
+    if user_id in Config.ADMIN_IDS:
+        # Администратор пропускает запрос согласия
+        await show_bouquet_options(message_or_callback, state)
+        return
     
     # Проверяем, есть ли у пользователя согласие
     user = await db.get_user(user_id)
@@ -222,6 +229,85 @@ async def bouquet_selected(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+async def show_bouquet_count_selection(message_or_callback, state: FSMContext, variant_num: int, quantity: int, variant_name: str):
+    """Показать полное содержание заказа и кнопки для изменения количества"""
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    
+    data = await state.get_data()
+    bouquets = data.get("bouquets", [])
+    
+    # Проверяем, это первый букет или нет
+    is_first_bouquet = len(bouquets) == 1
+    
+    if is_first_bouquet:
+        # Для первого букета другой текст
+        current_bouquet = bouquets[0] if bouquets else None
+        current_bouquet_count = current_bouquet["count"] if current_bouquet else 0
+        
+        text = (
+            f"Добавляем в заказ №{variant_num} «{variant_name}» ({quantity} шт.)\n\n"
+            f"Текущее количество: {current_bouquet_count} {'букет' if current_bouquet_count == 1 else 'букета' if current_bouquet_count in [2, 3, 4] else 'букетов'}\n\n"
+            "Хотите больше таких букетов или выбрать другие дополнительно?"
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➖", callback_data=f"change_count_{variant_num}_{quantity}_-1"),
+                InlineKeyboardButton(text="➕", callback_data=f"change_count_{variant_num}_{quantity}_+1")
+            ],
+            [InlineKeyboardButton(text="🛒 Купить еще букеты", callback_data="more_yes")],
+            [InlineKeyboardButton(text="💳 ПЕРЕЙТИ К ОПЛАТЕ", callback_data="more_no")]
+        ])
+    else:
+        # Для последующих букетов показываем полный список
+        text_parts = ["📋 Ваш заказ:\n"]
+        
+        current_bouquet_count = 0
+        for bouquet in bouquets:
+            count = bouquet["count"]
+            variant = bouquet["variant"]
+            variant_n = bouquet["variant_name"]
+            qty = bouquet["quantity"]
+            
+            count_text = f"{count} {'букет' if count == 1 else 'букета' if count in [2, 3, 4] else 'букетов'}"
+            
+            # Выделяем текущий изменяемый букет
+            if variant == variant_num and qty == quantity:
+                text_parts.append(f"🔹 №{variant} «{variant_n}» - {qty} шт. — {count_text} ⬅️ изменяете")
+                current_bouquet_count = count
+            else:
+                text_parts.append(f"🔹 №{variant} «{variant_n}» - {qty} шт. — {count_text}")
+        
+        text_parts.append(f"\n📝 Изменяете количество букета №{variant_num} «{variant_name}» ({quantity} шт.)")
+        text_parts.append(f"Текущее количество: {current_bouquet_count} {'букет' if current_bouquet_count == 1 else 'букета' if current_bouquet_count in [2, 3, 4] else 'букетов'}")
+        text_parts.append("\nХотите выбрать еще букеты?")
+        
+        text = "\n".join(text_parts)
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➖", callback_data=f"change_count_{variant_num}_{quantity}_-1"),
+                InlineKeyboardButton(text="➕", callback_data=f"change_count_{variant_num}_{quantity}_+1")
+            ],
+            [InlineKeyboardButton(text="📋 Редактировать другие букеты", callback_data="more_yes")],
+            [InlineKeyboardButton(text="💳 ПЕРЕЙТИ К ОПЛАТЕ", callback_data="more_no")]
+        ])
+    
+    # Определяем, как отправить сообщение
+    if hasattr(message_or_callback, 'message'):
+        # Это callback, пробуем edit_text, если не получается - используем answer
+        try:
+            await message_or_callback.message.edit_text(text, reply_markup=keyboard)
+        except:
+            await message_or_callback.message.answer(text, reply_markup=keyboard)
+    elif hasattr(message_or_callback, 'answer'):
+        # Это message, используем answer
+        await message_or_callback.answer(text, reply_markup=keyboard)
+    else:
+        # Fallback
+        await message_or_callback.answer(text, reply_markup=keyboard)
+
+
 @router.callback_query(F.data.in_(["qty_15", "qty_25"]), StateFilter(OrderStates.selecting_quantity))
 async def quantity_selected(callback: CallbackQuery, state: FSMContext):
     """Обработка выбора количества"""
@@ -251,29 +337,165 @@ async def quantity_selected(callback: CallbackQuery, state: FSMContext):
     await state.update_data(bouquets=bouquets)
     await state.set_state(OrderStates.selecting_more_bouquets)
     
-    text = "Хотите выбрать еще букеты?"
-    
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Да", callback_data="more_yes")],
-        [InlineKeyboardButton(text="❌ Нет", callback_data="more_no")]
-    ])
-    
-    await callback.message.answer(text, reply_markup=keyboard)
+    # Формируем текст с полным содержанием заказа
+    await show_bouquet_count_selection(callback, state, variant_num, quantity, variant_name)
     await callback.answer()
 
 
-@router.callback_query(F.data == "more_yes", StateFilter(OrderStates.selecting_more_bouquets))
+@router.callback_query(F.data.startswith("change_count_"))
+async def change_bouquet_count(callback: CallbackQuery, state: FSMContext):
+    """Изменение количества букетов текущего типа"""
+    # Формат: change_count_{variant}_{quantity}_{delta}
+    parts = callback.data.replace("change_count_", "").split("_")
+    variant_num = int(parts[0])
+    quantity = int(parts[1])
+    delta = int(parts[2])
+    
+    data = await state.get_data()
+    bouquets = data.get("bouquets", [])
+    
+    # Получаем название варианта из конфига
+    variant_name = Config.BOUQUET_VARIANTS.get(variant_num, {}).get("name", f"Вариант {variant_num}")
+    
+    # Находим букет и изменяем количество
+    found = False
+    for bouquet in bouquets:
+        if bouquet["variant"] == variant_num and bouquet["quantity"] == quantity:
+            variant_name = bouquet["variant_name"]  # Используем сохраненное название
+            new_count = bouquet["count"] + delta
+            if new_count < 0:
+                await callback.answer("Количество не может быть отрицательным", show_alert=True)
+                return
+            elif new_count == 0:
+                # Удаляем букет из списка
+                bouquets.remove(bouquet)
+            else:
+                bouquet["count"] = new_count
+            found = True
+            break
+    
+    # Если букет не найден и delta положительный, создаем его заново
+    if not found:
+        if delta > 0:
+            bouquets.append({
+                "variant": variant_num,
+                "variant_name": variant_name,
+                "quantity": quantity,
+                "count": delta  # Создаем с количеством равным delta
+            })
+            found = True
+        else:
+            # Если пытаемся уменьшить несуществующий букет, ничего не делаем
+            await callback.answer("Букет не найден", show_alert=True)
+            return
+    
+    await state.update_data(bouquets=bouquets)
+    
+    # Если список букетов пуст, возвращаемся к выбору букета
+    if not bouquets:
+        await callback.message.answer("Вы удалили все букеты. Выберите букет заново.")
+        await state.set_state(OrderStates.selecting_bouquet)
+        await show_bouquet_options(callback, state)
+        await callback.answer()
+        return
+    
+    # Обновляем сообщение с полным содержанием заказа
+    await show_bouquet_count_selection(callback, state, variant_num, quantity, variant_name)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "more_yes")
 async def select_more_bouquets(callback: CallbackQuery, state: FSMContext):
     """Выбор дополнительных букетов"""
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    
     await state.set_state(OrderStates.selecting_bouquet)
     
-    # Используем ту же функцию показа букетов с кнопками
+    # Показываем текущий заказ с возможностью редактирования
+    data = await state.get_data()
+    bouquets = data.get("bouquets", [])
+    
+    if bouquets:
+        # Показываем список букетов с возможностью редактирования
+        text_parts = ["📋 Ваш заказ:\n"]
+        buttons = []
+        
+        is_first_bouquet = len(bouquets) == 1
+        
+        for bouquet in bouquets:
+            count = bouquet["count"]
+            variant = bouquet["variant"]
+            variant_n = bouquet["variant_name"]
+            qty = bouquet["quantity"]
+            
+            count_text = f"{count} {'букет' if count == 1 else 'букета' if count in [2, 3, 4] else 'букетов'}"
+            text_parts.append(f"🔹 №{variant} «{variant_n}» - {qty} шт. — {count_text}")
+            
+            # Показываем кнопки редактирования только если это не первый букет
+            if not is_first_bouquet:
+                buttons.append([
+                    InlineKeyboardButton(
+                        text=f"✏️ Редактировать №{variant} «{variant_n}» ({qty} шт.)",
+                        callback_data=f"edit_bouquet_{variant}_{qty}"
+                    )
+                ])
+        
+        if is_first_bouquet:
+            text_parts.append("\nВыберите действие:")
+        else:
+            text_parts.append("\nВыберите букет для редактирования или добавьте новый:")
+        
+        text = "\n".join(text_parts)
+        
+        # Добавляем кнопку "Добавить другие букеты" под кнопками редактирования (если они есть)
+        if not is_first_bouquet:
+            buttons.append([InlineKeyboardButton(text="➕ Добавить другие букеты", callback_data="add_new_bouquet")])
+        else:
+            buttons.append([InlineKeyboardButton(text="➕ Добавить другие букеты", callback_data="add_new_bouquet")])
+        
+        buttons.append([InlineKeyboardButton(text="💳 ПЕРЕЙТИ К ОПЛАТЕ", callback_data="more_no")])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        await callback.message.answer(text, reply_markup=keyboard)
+    else:
+        # Если букетов нет, показываем выбор букетов
+        await show_bouquet_options(callback, state)
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data == "add_new_bouquet")
+async def add_new_bouquet(callback: CallbackQuery, state: FSMContext):
+    """Добавление нового букета"""
+    await state.set_state(OrderStates.selecting_bouquet)
     await show_bouquet_options(callback, state)
     await callback.answer()
 
 
-@router.callback_query(F.data == "more_no", StateFilter(OrderStates.selecting_more_bouquets))
+@router.callback_query(F.data.startswith("edit_bouquet_"))
+async def edit_bouquet(callback: CallbackQuery, state: FSMContext):
+    """Редактирование конкретного букета"""
+    # Формат: edit_bouquet_{variant}_{quantity}
+    parts = callback.data.replace("edit_bouquet_", "").split("_")
+    variant_num = int(parts[0])
+    quantity = int(parts[1])
+    
+    variant_name = Config.BOUQUET_VARIANTS.get(variant_num, {}).get("name", f"Вариант {variant_num}")
+    
+    # Получаем название из сохраненных данных, если есть
+    data = await state.get_data()
+    bouquets = data.get("bouquets", [])
+    for bouquet in bouquets:
+        if bouquet["variant"] == variant_num and bouquet["quantity"] == quantity:
+            variant_name = bouquet["variant_name"]
+            break
+    
+    await state.set_state(OrderStates.selecting_more_bouquets)
+    await show_bouquet_count_selection(callback, state, variant_num, quantity, variant_name)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "more_no")
 async def no_more_bouquets(callback: CallbackQuery, state: FSMContext):
     """Переход к выбору даты"""
     await state.set_state(OrderStates.selecting_date)
@@ -343,86 +565,15 @@ async def time_selected(callback: CallbackQuery, state: FSMContext):
     await state.update_data(pickup_time=time_str)
     await state.set_state(OrderStates.entering_name)
     
-    # Получаем данные пользователя
-    user = await db.get_user(callback.from_user.id)
-    user_first_name = callback.from_user.first_name or ""
-    user_last_name = callback.from_user.last_name or ""
-    
-    # Если есть сохраненные данные или имя из Telegram
-    if user and user.get("first_name") and user.get("last_name"):
-        first_name = user.get("first_name")
-        last_name = user.get("last_name")
-    elif user_first_name and user_last_name:
-        first_name = user_first_name
-        last_name = user_last_name
-    else:
-        # Предлагаем использовать имя из профиля или ввести вручную
-        text = (
-            "Отлично! Осталось совсем немного.\n"
-            "Выберите способ указания имени:"
-        )
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text=f"Использовать имя из профиля: {user_first_name} {user_last_name}" if user_first_name else "Использовать имя из профиля",
-                callback_data="use_profile_name"
-            )],
-            [InlineKeyboardButton(text="Ввести имя вручную", callback_data="enter_name_manually")]
-        ])
-        
-        await callback.message.answer(text, reply_markup=keyboard)
-        await callback.answer()
-        return
-    
-    # Используем сохраненное или имя из профиля
-    await state.update_data(
-        first_name=first_name,
-        last_name=last_name,
-        username=callback.from_user.username or ""
-    )
-    
-    # Сохраняем имя пользователя
-    await db.save_user(callback.from_user.id, {
-        "first_name": first_name,
-        "last_name": last_name,
-        "username": callback.from_user.username or ""
-    })
-    
-    # Переходим к подтверждению заказа
-    await process_order_confirmation(callback, state)
-
-
-@router.callback_query(F.data == "use_profile_name", StateFilter(OrderStates.entering_name))
-async def use_profile_name(callback: CallbackQuery, state: FSMContext):
-    """Использовать имя из профиля Telegram"""
-    first_name = callback.from_user.first_name or "Имя"
-    last_name = callback.from_user.last_name or "Фамилия"
-    
-    await state.update_data(
-        first_name=first_name,
-        last_name=last_name,
-        username=callback.from_user.username or ""
-    )
-    
-    # Сохраняем имя пользователя
-    await db.save_user(callback.from_user.id, {
-        "first_name": first_name,
-        "last_name": last_name,
-        "username": callback.from_user.username or ""
-    })
-    
-    await process_order_confirmation(callback, state)
-    await callback.answer()
-
-
-@router.callback_query(F.data == "enter_name_manually", StateFilter(OrderStates.entering_name))
-async def enter_name_manually(callback: CallbackQuery, state: FSMContext):
-    """Запрос на ввод имени вручную"""
+    # Всегда запрашиваем текстовый ввод имени
     await callback.message.answer(
+        "Отлично! Осталось совсем немного.\n\n"
         "Пожалуйста, отправьте ваше Имя и Фамилию через пробел.\n"
         "Например: Иван Иванов"
     )
     await callback.answer()
+
+
 
 
 @router.message(StateFilter(OrderStates.entering_name), F.text)
@@ -448,6 +599,39 @@ async def name_entered(message: Message, state: FSMContext):
         "last_name": last_name,
         "username": message.from_user.username or ""
     })
+    
+    # Переходим к вводу телефона
+    await state.set_state(OrderStates.entering_phone)
+    await message.answer(
+        "Отлично! Теперь укажите ваш номер телефона.\n"
+        "Например: +79991234567 или 89991234567"
+    )
+
+
+@router.message(StateFilter(OrderStates.entering_phone), F.text)
+async def phone_entered(message: Message, state: FSMContext):
+    """Обработка ввода номера телефона"""
+    phone = message.text.strip()
+    
+    # Простая валидация номера телефона
+    # Убираем все пробелы, дефисы и скобки
+    phone_clean = phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+    
+    # Проверяем формат: должен начинаться с +7 или 8, и содержать 11 цифр
+    if phone_clean.startswith("+7") and len(phone_clean) == 12:
+        phone_normalized = phone_clean
+    elif phone_clean.startswith("8") and len(phone_clean) == 11:
+        phone_normalized = "+7" + phone_clean[1:]
+    elif phone_clean.startswith("7") and len(phone_clean) == 11:
+        phone_normalized = "+" + phone_clean
+    else:
+        await message.answer(
+            "Пожалуйста, укажите номер телефона в правильном формате.\n"
+            "Например: +79991234567 или 89991234567"
+        )
+        return
+    
+    await state.update_data(phone=phone_normalized)
     
     # Переходим к подтверждению заказа
     await process_order_confirmation_from_message(message, state)
@@ -493,10 +677,17 @@ async def process_order_confirmation(callback: CallbackQuery, state: FSMContext)
         "Всё правильно?"
     )
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Да, всё верно — подтверждаю", callback_data="confirm_order")],
-        [InlineKeyboardButton(text="🔄 Нет, хочу изменить", callback_data="change_order")]
-    ])
+    # Формируем кнопки для редактирования букетов
+    buttons = []
+    bouquets_list = data.get("bouquets", [])
+    
+    if bouquets_list:
+        buttons.append([InlineKeyboardButton(text="✏️ Редактировать букеты", callback_data="edit_order_bouquets")])
+    
+    buttons.append([InlineKeyboardButton(text="✅ Да, всё верно — подтверждаю", callback_data="confirm_order")])
+    buttons.append([InlineKeyboardButton(text="🔄 Нет, хочу изменить", callback_data="change_order")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     
     await callback.message.answer(confirmation_text, reply_markup=keyboard)
 
@@ -539,14 +730,21 @@ async def process_order_confirmation_from_message(message: Message, state: FSMCo
         f"🔹 Самовывоз: {data.get('pickup_date')}, с {data.get('pickup_time')} до "
         f"{int(data.get('pickup_time', '00:00').split(':')[0]) + 1:02d}:00\n"
         f"🔹 Стоимость: {total_price:,} ₽\n"
-        f"🔹 Получатель: {data.get('last_name', '')} {data.get('first_name', '')}\n\n"
+        f"🔹 Получатель: {data.get('last_name', '')} {data.get('first_name', '')}\n"
+        f"🔹 Телефон: {data.get('phone', 'не указан')}\n\n"
         "Всё правильно?"
     )
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Да, всё верно — подтверждаю", callback_data="confirm_order")],
-        [InlineKeyboardButton(text="🔄 Нет, хочу изменить", callback_data="change_order")]
-    ])
+    # Формируем кнопки для редактирования букетов
+    buttons = []
+    
+    if bouquets:
+        buttons.append([InlineKeyboardButton(text="✏️ Редактировать букеты", callback_data="edit_order_bouquets")])
+    
+    buttons.append([InlineKeyboardButton(text="✅ Да, всё верно — подтверждаю", callback_data="confirm_order")])
+    buttons.append([InlineKeyboardButton(text="🔄 Нет, хочу изменить", callback_data="change_order")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     
     await message.answer(confirmation_text, reply_markup=keyboard)
     await state.set_state(OrderStates.confirming_order)
@@ -563,6 +761,7 @@ async def order_confirmed(callback: CallbackQuery, state: FSMContext):
         "first_name": data.get("first_name"),
         "last_name": data.get("last_name"),
         "username": data.get("username", ""),
+        "phone": data.get("phone", ""),
         "bouquets": data.get("bouquets", []),
         "pickup_date": data.get("pickup_date"),
         "pickup_time": data.get("pickup_time"),
@@ -592,6 +791,77 @@ async def order_confirmed(callback: CallbackQuery, state: FSMContext):
     ])
     
     await callback.message.answer(payment_text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "edit_order_bouquets")
+async def edit_order_bouquets(callback: CallbackQuery, state: FSMContext):
+    """Редактирование букетов в заказе"""
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    
+    data = await state.get_data()
+    bouquets = data.get("bouquets", [])
+    
+    if not bouquets:
+        await callback.answer("В заказе нет букетов", show_alert=True)
+        return
+    
+    # Показываем список букетов с возможностью редактирования
+    text_parts = ["📋 Редактирование заказа:\n"]
+    buttons = []
+    
+    for bouquet in bouquets:
+        count = bouquet["count"]
+        variant = bouquet["variant"]
+        variant_n = bouquet["variant_name"]
+        qty = bouquet["quantity"]
+        
+        count_text = f"{count} {'букет' if count == 1 else 'букета' if count in [2, 3, 4] else 'букетов'}"
+        text_parts.append(f"🔹 №{variant} «{variant_n}» - {qty} шт. — {count_text}")
+        
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"✏️ Редактировать №{variant} «{variant_n}» ({qty} шт.)",
+                callback_data=f"edit_bouquet_{variant}_{qty}"
+            )
+        ])
+    
+    text_parts.append("\nВыберите букет для редактирования или добавьте новый:")
+    text = "\n".join(text_parts)
+    
+    buttons.append([InlineKeyboardButton(text="➕ Добавить новый букет", callback_data="add_new_bouquet")])
+    buttons.append([InlineKeyboardButton(text="✅ Вернуться к подтверждению", callback_data="back_to_confirmation")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await callback.message.answer(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "back_to_confirmation")
+async def back_to_confirmation(callback: CallbackQuery, state: FSMContext):
+    """Возврат к подтверждению заказа"""
+    data = await state.get_data()
+    bouquets = data.get("bouquets", [])
+    
+    if not bouquets:
+        await callback.message.answer("В заказе нет букетов. Выберите букет.")
+        await state.set_state(OrderStates.selecting_bouquet)
+        await show_bouquet_options(callback, state)
+        await callback.answer()
+        return
+    
+    # Пересчитываем стоимость
+    total_price = 0
+    for bouquet in bouquets:
+        quantity = bouquet["quantity"]
+        count = bouquet["count"]
+        price = Config.PRICE_15 if quantity == 15 else Config.PRICE_25
+        total_price += price * count
+    
+    await state.update_data(total_price=total_price)
+    
+    # Показываем подтверждение заказа
+    await process_order_confirmation(callback, state)
     await callback.answer()
 
 

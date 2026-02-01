@@ -55,7 +55,7 @@ class GoogleSheets:
             "№ заказа",
             "Дата и время",
             "Фамилия, Имя",
-            "@ телеграм",
+            "@ телеграм / Телефон",
             "№ варианта",
             "кол-во букетов",
             "кол-во тюльпанов",
@@ -99,6 +99,17 @@ class GoogleSheets:
         if username and not username.startswith("@"):
             username = f"@{username}"
         
+        # Получаем телефон
+        phone = order.get("phone", "")
+        
+        # Объединяем телеграм и телефон в один столбец
+        contact_info = []
+        if username:
+            contact_info.append(username)
+        if phone:
+            contact_info.append(phone)
+        contact_str = " / ".join(contact_info) if contact_info else ""
+        
         total_price = order.get("total_price", 0)
         
         # Определяем статус для отображения
@@ -122,7 +133,7 @@ class GoogleSheets:
                 order_number,
                 date_time,
                 full_name,
-                username,
+                contact_str,  # объединенные телеграм и телефон
                 variant_num,
                 count,
                 quantity,
@@ -161,7 +172,7 @@ class GoogleSheets:
                 # Если заказ не передан, пытаемся получить сумму из существующих строк
                 first_row = cells[0].row
                 try:
-                    total_price = self.worksheet.cell(first_row, 10).value  # колонка "сумма"
+                    total_price = self.worksheet.cell(first_row, 10).value  # колонка "сумма" (теперь 10-я после объединения телеграма и телефона)
                     payment_amount = total_price if status == "paid" else 0
                 except:
                     payment_amount = 0
@@ -174,10 +185,10 @@ class GoogleSheets:
                 # Обновить статус (колонка 1)
                 self.worksheet.update_cell(row, 1, status_display)
                 
-                # Обновить сумму оплаты (колонка 11)
+                # Обновить сумму оплаты (колонка 11 - "оплата")
                 self.worksheet.update_cell(row, 11, payment_amount)
                 
-                # Обновить возврат (колонка 12) если есть
+                # Обновить возврат (колонка 12 - "возврат") если есть
                 if refund_amount:
                     self.worksheet.update_cell(row, 12, refund_amount)
                     

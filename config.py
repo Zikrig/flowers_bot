@@ -46,6 +46,7 @@ class Config:
     def get_pickup_schedule():
         """Возвращает фиксированное расписание самовывоза"""
         schedule = {
+            "3 февраля": {"start": 8, "end": 15},
             "5 марта": {"start": 8, "end": 19},
             "6 марта": {"start": 7, "end": 19},
             "7 марта": {"start": 8, "end": 19},

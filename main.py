@@ -6,23 +6,23 @@ from config import Config
 from handlers import common, order, payment, cancellation, admin
 
 # Настройка логирования
-import os
-from logging.handlers import RotatingFileHandler
+# import os
+# from logging.handlers import RotatingFileHandler
 
-log_dir = "logs"
-os.makedirs(log_dir, exist_ok=True)
+# log_dir = "logs"
+# os.makedirs(log_dir, exist_ok=True)
 
 # Настройка логирования в файл и консоль
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        RotatingFileHandler(
-            os.path.join(log_dir, "bot.log"),
-            maxBytes=10*1024*1024,  # 10 MB
-            backupCount=3,
-            encoding='utf-8'
-        ),
+        # RotatingFileHandler(
+        #     os.path.join(log_dir, "bot.log"),
+        #     maxBytes=10*1024*1024,  # 10 MB
+        #     backupCount=3,
+        #     encoding='utf-8'
+        # ),
         logging.StreamHandler()  # Также выводим в консоль
     ]
 )

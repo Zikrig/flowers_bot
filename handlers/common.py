@@ -18,17 +18,21 @@ async def cmd_start(message: Message, state: FSMContext):
     # Сохраняем/обновляем данные пользователя из Telegram
     user = message.from_user
     
-    # Проверяем, есть ли у пользователя уже сохраненное согласие
+    # Получаем существующие данные пользователя (включая согласие)
     existing_user = await db.get_user(user.id)
-    consent_given = existing_user.get("consent_given", False) if existing_user else False
     
+    # Сохраняем согласие, если оно уже было дано (не перезаписываем)
     user_data = {
         "first_name": user.first_name or "",
         "last_name": user.last_name or "",
         "username": user.username or "",
-        "telegram_id": user.id,
-        "consent_given": consent_given  # Сохраняем существующее согласие
+        "telegram_id": user.id
     }
+    
+    # Если у пользователя уже есть согласие, сохраняем его
+    if existing_user and existing_user.get("consent_given"):
+        user_data["consent_given"] = True
+    
     await db.save_user(user.id, user_data)
     
     greeting = (
