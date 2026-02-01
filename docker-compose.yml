@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: flowers_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./credentials:/app/credentials
+      - ./orders:/app/orders
+      - ./handlers:/app/handlers
+      - ./config.py:/app/config.py
+      - ./database.py:/app/database.py
+      - ./google_sheets.py:/app/google_sheets.py
+      - ./order_template.py:/app/order_template.py
+      - ./main.py:/app/main.py
+    environment:
+      - TZ=Europe/Moscow
+
+
