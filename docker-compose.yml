@@ -17,7 +17,13 @@ services:
       - ./google_sheets.py:/app/google_sheets.py
       - ./order_template.py:/app/order_template.py
       - ./main.py:/app/main.py
+      - ./logs:/app/logs
     environment:
       - TZ=Europe/Moscow
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 

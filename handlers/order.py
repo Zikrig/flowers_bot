@@ -10,6 +10,9 @@ from google_sheets import GoogleSheets
 from order_template import OrderTemplate
 from datetime import datetime, timedelta
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 db = Database()
@@ -102,7 +105,7 @@ async def show_bouquet_options(message_or_callback, state: FSMContext):
             else:
                 await message_or_callback.answer_photo(photo=FSInputFile(colors_photo_path))
         except Exception as e:
-            print(f"Error sending colors photo: {e}")
+            logger.error(f"Error sending colors photo: {e}", exc_info=True)
     
     text = (
         "Отлично! Вот все 6 вариантов:\n\n"
@@ -117,14 +120,18 @@ async def show_bouquet_options(message_or_callback, state: FSMContext):
             photo_path = Config.BOUQUET_VARIANTS[i]["photo"]
             if os.path.exists(photo_path):
                 media_group.append(InputMediaPhoto(media=FSInputFile(photo_path)))
+            else:
+                logger.warning(f"Photo not found: {photo_path}")
         
         if media_group:
             if hasattr(message_or_callback, 'message'):
                 await message_or_callback.message.answer_media_group(media_group)
             else:
                 await message_or_callback.answer_media_group(media_group)
+        else:
+            logger.warning("No photos found to send for bouquet variants")
     except Exception as e:
-        print(f"Error sending photos: {e}")
+        logger.error(f"Error sending photos: {e}", exc_info=True)
     
     # Кнопки для выбора букета
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -198,7 +205,7 @@ async def bouquet_selected(callback: CallbackQuery, state: FSMContext):
         if media_group:
             await callback.message.answer_media_group(media_group)
     except Exception as e:
-        print(f"Error sending quantity photos: {e}")
+        logger.error(f"Error sending quantity photos: {e}", exc_info=True)
     
     text = (
         f"Вы выбрали букет №{variant_num} — «{variant['name']}»\n\n"
