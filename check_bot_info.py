@@ -46,3 +46,4 @@ except requests.exceptions.RequestException as e:
 except Exception as e:
     print(f"❌ Произошла ошибка: {e}")
 
+

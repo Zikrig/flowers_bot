@@ -17,8 +17,8 @@ class Config:
     
     
     # Payment
-    PAYMENT_PHONE = os.getenv("PAYMENT_PHONE", "+79372431722")
-    PAYMENT_RECEIVER = os.getenv("PAYMENT_RECEIVER", "Кузнецов А.А.")
+    PAYMENT_PHONE = os.getenv("PAYMENT_PHONE", "89881664153")
+    PAYMENT_RECEIVER = os.getenv("PAYMENT_RECEIVER", "Дина К.")
     
     # Contacts
     ADMIN_CONTACTS = os.getenv("ADMIN_CONTACTS", "@fedorftp,@Dina_Kuznetsova75").split(",")
@@ -44,37 +44,13 @@ class Config:
     
     @staticmethod
     def get_pickup_schedule():
-        """Генерирует расписание самовывоза на 7 дней вперед начиная с сегодня"""
-        from datetime import datetime, timedelta
-        import locale
-        
-        schedule = {}
-        today = datetime.now().date()
-        
-        # Русские названия месяцев
-        months = {
-            1: "января", 2: "февраля", 3: "марта", 4: "апреля",
-            5: "мая", 6: "июня", 7: "июля", 8: "августа",
-            9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
+        """Возвращает фиксированное расписание самовывоза"""
+        schedule = {
+            "5 марта": {"start": 8, "end": 19},
+            "6 марта": {"start": 7, "end": 19},
+            "7 марта": {"start": 8, "end": 19},
+            "8 марта": {"start": 8, "end": 15}
         }
-        
-        for i in range(7):
-            date = today + timedelta(days=i)
-            day = date.day
-            month = months[date.month]
-            date_str = f"{day} {month}"
-            
-            # Определяем часы работы
-            start_hour = Config.PICKUP_START_HOUR
-            end_hour = Config.PICKUP_END_HOUR
-            
-            # В выходные можно изменить часы, если нужно
-            # Например, в воскресенье (weekday() == 6) можно сделать другие часы
-            if date.weekday() == 6:  # Воскресенье
-                end_hour = 15  # До 15:00 в воскресенье
-            
-            schedule[date_str] = {"start": start_hour, "end": end_hour}
-        
         return schedule
 
 

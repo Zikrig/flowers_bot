@@ -44,3 +44,4 @@ def get_date_from_string(date_str: str) -> Optional[datetime]:
     """Алиас для обратной совместимости"""
     return parse_date_string(date_str)
 
+

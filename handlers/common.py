@@ -4,6 +4,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from config import Config
 from database import Database
+import os
 
 router = Router()
 db = Database()
@@ -44,7 +45,13 @@ async def cmd_start(message: Message, state: FSMContext):
         "👉 Нажмите «Выбрать букет»"
     )
     
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
+    
+    # Отправляем картинку с цветами, если она существует
+    colors_photo_path = "data/colors.jpg"
+    if os.path.exists(colors_photo_path):
+        await message.answer_photo(photo=FSInputFile(colors_photo_path))
+    
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Выбрать букет", callback_data="start_order")],
         [InlineKeyboardButton(text="Мои заказы", callback_data="my_orders")]

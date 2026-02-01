@@ -93,10 +93,19 @@ async def show_bouquet_options(message_or_callback, state: FSMContext):
     """Показать варианты букетов с кнопками"""
     await state.set_state(OrderStates.selecting_bouquet)
     
+    # Отправляем картинку с цветами, если она существует
+    colors_photo_path = "data/colors.jpg"
+    if os.path.exists(colors_photo_path):
+        try:
+            if hasattr(message_or_callback, 'message'):
+                await message_or_callback.message.answer_photo(photo=FSInputFile(colors_photo_path))
+            else:
+                await message_or_callback.answer_photo(photo=FSInputFile(colors_photo_path))
+        except Exception as e:
+            print(f"Error sending colors photo: {e}")
+    
     text = (
         "Отлично! Вот все 6 вариантов:\n\n"
-        "⚠️ Текстовое предупреждение для клиента: "
-        "реальный букет не будет 100% как на фото, каждый букет уникален\n\n"
         "Выберите вариант букета:"
     )
     
@@ -252,18 +261,8 @@ async def select_more_bouquets(callback: CallbackQuery, state: FSMContext):
     """Выбор дополнительных букетов"""
     await state.set_state(OrderStates.selecting_bouquet)
     
-    text = (
-        "Выберите еще один букет:\n\n"
-        "1️⃣. Микс\n"
-        "2️⃣. Красный\n"
-        "3️⃣. Жёлтый\n"
-        "4️⃣. Белый\n"
-        "5️⃣. Жёлтый + фиолетовый\n"
-        "6️⃣. Красный + жёлтый\n\n"
-        "💬 Напишите номер букета (от 1 до 6)."
-    )
-    
-    await callback.message.answer(text)
+    # Используем ту же функцию показа букетов с кнопками
+    await show_bouquet_options(callback, state)
     await callback.answer()
 
 
@@ -572,8 +571,8 @@ async def order_confirmed(callback: CallbackQuery, state: FSMContext):
     payment_text = (
         f"Спасибо! Ваш заказ принят.\n\n"
         f"💳 Оплатите {data.get('total_price', 0):,} ₽ по реквизитам:\n"
-        f"Сбербанк (получатель {Config.PAYMENT_RECEIVER})\n"
-        f"Номер {Config.PAYMENT_PHONE}\n\n"
+        f"перевод СБЕРБАНК получатель {Config.PAYMENT_RECEIVER}\n"
+        f"{Config.PAYMENT_PHONE}\n\n"
         "❗ Важно:\n"
         "Оплатить нужно в течение 24 часов с момента оформления заказа.\n"
         "Если оплата не поступит — заказ автоматически отменится.\n\n"
