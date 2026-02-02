@@ -1,0 +1,267 @@
+{
+  "001": {
+    "user_id": 184374602,
+    "first_name": "Ф",
+    "last_name": "Г",
+    "username": "fgriz",
+    "bouquets": [
+      {
+        "variant": 2,
+        "variant_name": "Красный",
+        "quantity": 15,
+        "count": 1
+      }
+    ],
+    "pickup_date": "6 марта",
+    "pickup_time": "12:00",
+    "total_price": 1800,
+    "status": "cancelled",
+    "order_number": "001",
+    "created_at": "2026-02-01T15:11:36.237033",
+    "reason": "timeout",
+    "updated_at": [
+      "2026-02-02T23:29:45.474706"
+    ]
+  },
+  "002": {
+    "user_id": 184374602,
+    "first_name": "Ф",
+    "last_name": "Г",
+    "username": "fgriz",
+    "bouquets": [
+      {
+        "variant": 5,
+        "variant_name": "Жёлтый + фиолетовый",
+        "quantity": 25,
+        "count": 1
+      }
+    ],
+    "pickup_date": "6 марта",
+    "pickup_time": "12:00",
+    "total_price": 3000,
+    "status": "cancelled",
+    "order_number": "002",
+    "created_at": "2026-02-01T15:14:41.990430",
+    "reason": "timeout",
+    "updated_at": [
+      "2026-02-02T23:29:45.726793"
+    ]
+  },
+  "003": {
+    "user_id": 184374602,
+    "first_name": "Иннокентий",
+    "last_name": "фф",
+    "username": "fgriz",
+    "bouquets": [
+      {
+        "variant": 4,
+        "variant_name": "Белый",
+        "quantity": 25,
+        "count": 1
+      }
+    ],
+    "pickup_date": "5 февраля",
+    "pickup_time": "11:00",
+    "total_price": 3000,
+    "status": "cancelled",
+    "order_number": "003",
+    "created_at": "2026-02-01T21:19:51.560297",
+    "receipt_file_id": "AgACAgIAAxkBAANdaX-ZUQoziw4ctkB1CoHo-YRgduMAApwRaxu5mPlLFD6alKL_5kkBAAMCAAN5AAM4BA",
+    "receipt_file_type": "photo",
+    "updated_at": [
+      "2026-02-01T21:20:02.224319",
+      "2026-02-01T21:20:16.915050",
+      "2026-02-01T21:21:06.647410"
+    ],
+    "refund_card": "88005553535"
+  },
+  "004": {
+    "user_id": 184374602,
+    "first_name": "44",
+    "last_name": "44",
+    "username": "fgriz",
+    "bouquets": [
+      {
+        "variant": 3,
+        "variant_name": "Жёлтый",
+        "quantity": 15,
+        "count": 1
+      },
+      {
+        "variant": 4,
+        "variant_name": "Белый",
+        "quantity": 25,
+        "count": 1
+      }
+    ],
+    "pickup_date": "7 марта",
+    "pickup_time": "15:00",
+    "total_price": 4800,
+    "status": "cancelled",
+    "order_number": "004",
+    "created_at": "2026-02-01T22:22:00.160810",
+    "reason": "timeout",
+    "updated_at": [
+      "2026-02-02T23:29:45.809840"
+    ]
+  },
+  "005": {
+    "user_id": 184374602,
+    "first_name": "Фёдор",
+    "last_name": "Г",
+    "username": "fgriz",
+    "phone": "+78234324343",
+    "bouquets": [
+      {
+        "variant": 4,
+        "variant_name": "Белый",
+        "quantity": 25,
+        "count": 1
+      },
+      {
+        "variant": 1,
+        "variant_name": "Микс",
+        "quantity": 15,
+        "count": 1
+      }
+    ],
+    "pickup_date": "5 марта",
+    "pickup_time": "15:00",
+    "total_price": 4800,
+    "status": "cancelled",
+    "order_number": "005",
+    "created_at": "2026-02-01T22:27:59.519291",
+    "receipt_file_id": "AgACAgIAAxkBAAPeaX-pV10yxbZvPvdVgr5FstQEYXIAAgISaxu5mPlL5PvHwPDW1oQBAAMCAAN5AAM4BA",
+    "receipt_file_type": "photo",
+    "updated_at": [
+      "2026-02-01T22:28:24.616828",
+      "2026-02-01T22:28:30.846176",
+      "2026-02-01T22:30:33.035189"
+    ],
+    "refund_card": "438534534"
+  },
+  "007": {
+    "user_id": 184374602,
+    "first_name": "ф",
+    "last_name": "г",
+    "username": "fgriz",
+    "phone": "+79771144343",
+    "bouquets": [
+      {
+        "variant": 4,
+        "variant_name": "Белый",
+        "quantity": 15,
+        "count": 2
+      },
+      {
+        "variant": 5,
+        "variant_name": "Жёлтый + фиолетовый",
+        "quantity": 25,
+        "count": 1
+      },
+      {
+        "variant": 2,
+        "variant_name": "Красный",
+        "quantity": 15,
+        "count": 1
+      }
+    ],
+    "pickup_date": "3 февраля",
+    "pickup_time": "09:00",
+    "total_price": 8400,
+    "status": "paid",
+    "order_number": "007",
+    "created_at": "2026-02-01T22:58:29.526617",
+    "receipt_file_id": "AgACAgIAAxkBAAPeaX-pV10yxbZvPvdVgr5FstQEYXIAAgISaxu5mPlL5PvHwPDW1oQBAAMCAAN5AAM4BA",
+    "receipt_file_type": "photo",
+    "updated_at": [
+      "2026-02-01T22:58:38.782536",
+      "2026-02-01T22:58:43.393528"
+    ]
+  },
+  "008": {
+    "user_id": 184374602,
+    "first_name": "a",
+    "last_name": "a",
+    "username": "fgriz",
+    "phone": "+79991234567",
+    "bouquets": [
+      {
+        "variant": 4,
+        "variant_name": "Белый",
+        "quantity": 15,
+        "count": 2
+      },
+      {
+        "variant": 1,
+        "variant_name": "Микс",
+        "quantity": 25,
+        "count": 1
+      }
+    ],
+    "pickup_date": "6 марта",
+    "pickup_time": "18:00",
+    "total_price": 6600,
+    "status": "paid",
+    "order_number": "008",
+    "created_at": "2026-02-01T23:15:47.486083",
+    "receipt_file_id": "AgACAgIAAxkBAAPeaX-pV10yxbZvPvdVgr5FstQEYXIAAgISaxu5mPlL5PvHwPDW1oQBAAMCAAN5AAM4BA",
+    "receipt_file_type": "photo",
+    "updated_at": [
+      "2026-02-01T23:15:56.939567",
+      "2026-02-01T23:15:59.204979"
+    ]
+  },
+  "009": {
+    "user_id": 184374602,
+    "first_name": "a",
+    "last_name": "a",
+    "username": "fgriz",
+    "phone": "+79991234567",
+    "bouquets": [
+      {
+        "variant": 4,
+        "variant_name": "Белый",
+        "quantity": 25,
+        "count": 1
+      }
+    ],
+    "pickup_date": "5 марта",
+    "pickup_time": "15:00",
+    "total_price": 3000,
+    "status": "cancelled",
+    "order_number": "009",
+    "created_at": "2026-02-01T23:18:08.522082",
+    "reason": "timeout",
+    "updated_at": [
+      "2026-02-02T23:29:45.885419"
+    ]
+  },
+  "010": {
+    "user_id": 184374602,
+    "first_name": "5",
+    "last_name": "5",
+    "username": "fgriz",
+    "phone": "+79991234567",
+    "bouquets": [
+      {
+        "variant": 2,
+        "variant_name": "Красный",
+        "quantity": 15,
+        "count": 1
+      }
+    ],
+    "pickup_date": "7 марта",
+    "pickup_time": "15:00",
+    "total_price": 1800,
+    "status": "paid",
+    "order_number": "010",
+    "created_at": "2026-02-02T23:30:16.020935",
+    "receipt_file_id": "AgACAgIAAxkBAAObaYEJXctKDeZ7N9pOHAZAREsoNmAAAsoTaxtfPghI4xuQ1H1183gBAAMCAAN4AAM4BA",
+    "receipt_file_type": "photo",
+    "updated_at": [
+      "2026-02-02T23:30:22.318449",
+      "2026-02-02T23:30:24.313342"
+    ]
+  }
+}

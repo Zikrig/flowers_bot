@@ -3,6 +3,40 @@ from google.oauth2.service_account import Credentials
 from typing import Dict, List
 import os
 from config import Config
+import json
+import time
+import traceback
+
+
+# region agent log
+_DEBUG_LOG_PATHS = [
+    r"c:\Users\Ф\Desktop\freelance\flowers_bot\.cursor\debug.log",  # host path (Cursor workspace)
+    r"/app/.cursor/debug.log",  # docker path (mounted from ./.cursor)
+    os.path.join(".cursor", "debug.log"),  # relative fallback
+]
+
+
+def _dbg_log(hypothesisId: str, location: str, message: str, data: Dict):
+    """Write one NDJSON line for debug-mode. Avoid secrets/PII."""
+    payload = {
+        "sessionId": "debug-session",
+        "runId": os.getenv("DEBUG_RUN_ID", "pre-fix"),
+        "hypothesisId": hypothesisId,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    line = json.dumps(payload, ensure_ascii=False)
+    for p in _DEBUG_LOG_PATHS:
+        try:
+            os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+            with open(p, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+            return
+        except Exception:
+            continue
+# endregion
 
 
 class GoogleSheets:
@@ -13,6 +47,19 @@ class GoogleSheets:
         self.client = None
         self.sheet = None
         self.worksheet = None
+        # region agent log
+        _dbg_log(
+            "A",
+            "google_sheets.py:GoogleSheets.__init__",
+            "init",
+            {
+                "has_sheet_id": bool(self.sheet_id),
+                "worksheet_name": self.worksheet_name,
+                "credentials_path": self.credentials_path,
+                "credentials_exists": bool(self.credentials_path and os.path.exists(self.credentials_path)),
+            },
+        )
+        # endregion
         self._connect()
     
     def ensure_connected(self):
@@ -22,8 +69,29 @@ class GoogleSheets:
     
     def _connect(self):
         """Подключение к Google Sheets"""
+        # region agent log
+        _dbg_log(
+            "A",
+            "google_sheets.py:GoogleSheets._connect",
+            "connect_start",
+            {
+                "has_sheet_id": bool(self.sheet_id),
+                "worksheet_name": self.worksheet_name,
+                "credentials_path": self.credentials_path,
+                "credentials_exists": bool(self.credentials_path and os.path.exists(self.credentials_path)),
+            },
+        )
+        # endregion
         if not os.path.exists(self.credentials_path):
             print(f"Warning: Credentials file not found at {self.credentials_path}")
+            # region agent log
+            _dbg_log(
+                "B",
+                "google_sheets.py:GoogleSheets._connect",
+                "credentials_missing",
+                {"credentials_path": self.credentials_path},
+            )
+            # endregion
             return
         
         scope = [
@@ -49,6 +117,17 @@ class GoogleSheets:
                     cols=20
                 )
                 self._init_headers()
+        # region agent log
+        _dbg_log(
+            "A",
+            "google_sheets.py:GoogleSheets._connect",
+            "connect_end",
+            {
+                "connected": bool(self.worksheet),
+                "sheet_opened": bool(self.sheet),
+            },
+        )
+        # endregion
     
     def _init_headers(self):
         """Инициализация заголовков таблицы (при создании нового листа)"""
@@ -101,6 +180,14 @@ class GoogleSheets:
         
         if not self.worksheet:
             print("Warning: Google Sheets not connected")
+            # region agent log
+            _dbg_log(
+                "A",
+                "google_sheets.py:GoogleSheets.init_headers",
+                "no_worksheet",
+                {"has_sheet_id": bool(self.sheet_id)},
+            )
+            # endregion
             return False
         
         # Первая строка заголовков
@@ -144,37 +231,72 @@ class GoogleSheets:
             all_values = self.worksheet.get_all_values()
             
             print(f"Initializing headers. Current rows in sheet: {len(all_values)}")
+            # region agent log
+            _dbg_log(
+                "A",
+                "google_sheets.py:GoogleSheets.init_headers",
+                "before_replace",
+                {"rows": len(all_values)},
+            )
+            # endregion
             
             # Всегда обновляем первые две строки через update
             # Если строк меньше двух, добавляем недостающие
             if len(all_values) >= 2:
-                # Сначала удаляем старые заголовки, потом вставляем новые
-                # Это гарантирует, что заголовки будут правильными
-                print("Deleting old header rows...")
-                self.worksheet.delete_rows(1, 2)
-                print("Inserting new header rows...")
-                # Вставляем новые заголовки в начало
-                self.worksheet.insert_row(header_row2, 1)  # Сначала вторую строку
-                self.worksheet.insert_row(header_row1, 1)  # Потом первую строку (она будет выше)
-                print("Successfully replaced header rows")
+                # Обновляем существующие первые две строки (без сдвига данных)
+                r1 = self.worksheet.update("A1:P1", [header_row1])
+                r2 = self.worksheet.update("A2:P2", [header_row2])
+                # region agent log
+                _dbg_log(
+                    "A",
+                    "google_sheets.py:GoogleSheets.init_headers",
+                    "updated_header_rows",
+                    {
+                        "update1": r1,
+                        "update2": r2,
+                    },
+                )
+                # endregion
                 return True
             elif len(all_values) == 1:
                 # Обновляем первую строку и добавляем вторую
-                result1 = self.worksheet.update('A1:P1', [header_row1])
+                r1 = self.worksheet.update("A1:P1", [header_row1])
                 self.worksheet.insert_row(header_row2, 2)
-                print(f"Updated first row and inserted second row. Result: {result1}")
+                # region agent log
+                _dbg_log(
+                    "A",
+                    "google_sheets.py:GoogleSheets.init_headers",
+                    "updated_row1_inserted_row2",
+                    {"update1": r1},
+                )
+                # endregion
                 return True
             else:
                 # Если таблица пустая, вставляем заголовки
                 self.worksheet.insert_row(header_row2, 1)  # Сначала вторую строку
                 self.worksheet.insert_row(header_row1, 1)  # Потом первую строку (она будет выше)
                 print("Inserted header rows into empty sheet")
+                # region agent log
+                _dbg_log(
+                    "A",
+                    "google_sheets.py:GoogleSheets.init_headers",
+                    "inserted_into_empty",
+                    {},
+                )
+                # endregion
                 return True
             
         except Exception as e:
             print(f"Error initializing headers: {e}")
-            import traceback
             traceback.print_exc()
+            # region agent log
+            _dbg_log(
+                "E",
+                "google_sheets.py:GoogleSheets.init_headers",
+                "exception",
+                {"error": str(e), "trace": traceback.format_exc()[:1000]},
+            )
+            # endregion
             # Если произошла ошибка, пробуем другой способ
             try:
                 # Пробуем удалить первые две строки и вставить новые
@@ -187,17 +309,53 @@ class GoogleSheets:
                 self.worksheet.insert_row(header_row2, 1)
                 self.worksheet.insert_row(header_row1, 1)
                 print("Used fallback method to insert headers")
+                # region agent log
+                _dbg_log(
+                    "E",
+                    "google_sheets.py:GoogleSheets.init_headers",
+                    "fallback_insert_ok",
+                    {},
+                )
+                # endregion
                 return True
             except Exception as e2:
                 print(f"Error adding headers as fallback: {e2}")
-                import traceback
                 traceback.print_exc()
+                # region agent log
+                _dbg_log(
+                    "E",
+                    "google_sheets.py:GoogleSheets.init_headers",
+                    "fallback_insert_failed",
+                    {"error": str(e2), "trace": traceback.format_exc()[:1000]},
+                )
+                # endregion
                 return False
     
     def add_order(self, order: Dict):
         """Добавить заказ в таблицу (создает две строки: количество букетов и количество тюльпанов по вариантам)"""
+        # region agent log
+        _dbg_log(
+            "C",
+            "google_sheets.py:GoogleSheets.add_order",
+            "enter",
+            {
+                "has_worksheet": bool(self.worksheet),
+                "order_number_present": bool(order.get("order_number")),
+                "status": order.get("status"),
+                "bouquets_len": len(order.get("bouquets", []) or []),
+            },
+        )
+        # endregion
         if not self.worksheet:
             print("Warning: Google Sheets not connected")
+            # region agent log
+            _dbg_log(
+                "D",
+                "google_sheets.py:GoogleSheets.add_order",
+                "no_worksheet",
+                {},
+            )
+            # endregion
             return
         
         order_number = order.get("order_number", "")
@@ -300,7 +458,26 @@ class GoogleSheets:
         ]
         
         # Добавляем обе строки заказа
-        self.worksheet.append_rows([row1, row2])
+        try:
+            self.worksheet.append_rows([row1, row2])
+            # region agent log
+            _dbg_log(
+                "E",
+                "google_sheets.py:GoogleSheets.add_order",
+                "append_rows_ok",
+                {"order_number": order_number},
+            )
+            # endregion
+        except Exception as e:
+            # region agent log
+            _dbg_log(
+                "E",
+                "google_sheets.py:GoogleSheets.add_order",
+                "append_rows_failed",
+                {"order_number": order_number, "error": str(e), "trace": traceback.format_exc()[:1000]},
+            )
+            # endregion
+            raise
     
     def update_order_status(self, order_number: str, status: str, **kwargs):
         """Обновить статус заказа в таблице (обновляет первую строку заказа, где находятся статус, сумма, оплата, возврат)"""

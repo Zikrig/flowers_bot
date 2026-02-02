@@ -4,7 +4,7 @@ from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from config import Config
 from database import Database
-from google_sheets import GoogleSheets
+from google_sheets import GoogleSheets, _dbg_log
 from order_template import OrderTemplate
 from handlers.order import OrderStates
 
@@ -167,6 +167,14 @@ async def invalid_receipt_format(message: Message):
 async def admin_confirm_payment(callback: CallbackQuery):
     """Подтверждение оплаты администратором"""
     order_number = callback.data.replace("admin_confirm_", "")
+    # region agent log
+    _dbg_log(
+        "C",
+        "handlers/payment.py:admin_confirm_payment",
+        "enter",
+        {"order_number": order_number},
+    )
+    # endregion
     
     # Проверка прав администратора
     if callback.from_user.id not in Config.ADMIN_IDS:
@@ -183,7 +191,23 @@ async def admin_confirm_payment(callback: CallbackQuery):
     
     # Добавление в Google Sheets
     order["order_number"] = order_number
+    # region agent log
+    _dbg_log(
+        "C",
+        "handlers/payment.py:admin_confirm_payment",
+        "before_sheets_add_order",
+        {"order_number": order_number},
+    )
+    # endregion
     sheets.add_order(order)
+    # region agent log
+    _dbg_log(
+        "C",
+        "handlers/payment.py:admin_confirm_payment",
+        "after_sheets_add_order",
+        {"order_number": order_number},
+    )
+    # endregion
     
     # Создание бланка заказа
     order["order_number"] = order_number

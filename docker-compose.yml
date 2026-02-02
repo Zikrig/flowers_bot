@@ -18,6 +18,7 @@ services:
       - ./order_template.py:/app/order_template.py
       - ./main.py:/app/main.py
       - ./logs:/app/logs
+      - ./.cursor:/app/.cursor
     environment:
       - TZ=Europe/Moscow
     logging:
