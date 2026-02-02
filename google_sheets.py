@@ -46,29 +46,136 @@ class GoogleSheets:
                 self._init_headers()
     
     def _init_headers(self):
-        """Инициализация заголовков таблицы"""
+        """Инициализация заголовков таблицы (при создании нового листа)"""
         if not self.worksheet:
             return
         
-        headers = [
+        # Первая строка заголовков
+        header_row1 = [
             "статус",
             "№ заказа",
-            "Дата и время",
+            "дата и время готовности",
             "Фамилия, Имя",
-            "@ телеграм / Телефон",
-            "№ варианта",
-            "кол-во букетов",
-            "кол-во тюльпанов",
+            "@ телеграм",
+            "№ варианта",  # Будет объединено с 6 колонками для вариантов
+            "", "", "", "", "",  # Место для вариантов 1-6
+            "итого букетов",
             "итого тюльпанов",
             "сумма",
             "оплата",
             "возврат"
         ]
         
-        self.worksheet.append_row(headers)
+        # Вторая строка заголовков (подзаголовки для вариантов)
+        header_row2 = [
+            "",  # статус
+            "",  # № заказа
+            "",  # дата и время готовности
+            "",  # Фамилия, Имя
+            "",  # @ телеграм
+            "1 (микс)",
+            "2 (красный)",
+            "3 (желтый)",
+            "4 (белый)",
+            "5 (фиол+желт)",
+            "6 (красн+желт)",
+            "",  # итого букетов
+            "",  # итого тюльпанов
+            "",  # сумма
+            "",  # оплата
+            ""   # возврат
+        ]
+        
+        self.worksheet.append_row(header_row1)
+        self.worksheet.append_row(header_row2)
+    
+    def init_headers(self):
+        """Инициализация заголовков таблицы при каждом запуске (перезаписывает первые две строки)"""
+        if not self.worksheet:
+            print("Warning: Google Sheets not connected")
+            return
+        
+        # Первая строка заголовков
+        header_row1 = [
+            "статус",
+            "№ заказа",
+            "дата и время готовности",
+            "Фамилия, Имя",
+            "@ телеграм",
+            "№ варианта",
+            "", "", "", "", "",  # Место для вариантов 1-6
+            "итого букетов",
+            "итого тюльпанов",
+            "сумма",
+            "оплата",
+            "возврат"
+        ]
+        
+        # Вторая строка заголовков (подзаголовки для вариантов)
+        header_row2 = [
+            "",  # статус
+            "",  # № заказа
+            "",  # дата и время готовности
+            "",  # Фамилия, Имя
+            "",  # @ телеграм
+            "1 (микс)",
+            "2 (красный)",
+            "3 (желтый)",
+            "4 (белый)",
+            "5 (фиол+желт)",
+            "6 (красн+желт)",
+            "",  # итого букетов
+            "",  # итого тюльпанов
+            "",  # сумма
+            "",  # оплата
+            ""   # возврат
+        ]
+        
+        try:
+            # Получаем все данные из таблицы
+            all_values = self.worksheet.get_all_values()
+            
+            # Если в таблице есть хотя бы две строки, обновляем их
+            if len(all_values) >= 2:
+                # Обновляем первые две строки через batch_update
+                self.worksheet.batch_update([
+                    {
+                        'range': 'A1:P1',
+                        'values': [header_row1]
+                    },
+                    {
+                        'range': 'A2:P2',
+                        'values': [header_row2]
+                    }
+                ])
+            elif len(all_values) == 1:
+                # Если есть только одна строка, обновляем её и добавляем вторую
+                self.worksheet.batch_update([
+                    {
+                        'range': 'A1:P1',
+                        'values': [header_row1]
+                    },
+                    {
+                        'range': 'A2:P2',
+                        'values': [header_row2]
+                    }
+                ])
+            else:
+                # Если таблица пустая, вставляем заголовки
+                self.worksheet.insert_row(header_row2, 1)  # Сначала вторую строку
+                self.worksheet.insert_row(header_row1, 1)  # Потом первую строку (она будет выше)
+            
+        except Exception as e:
+            print(f"Error initializing headers: {e}")
+            # Если произошла ошибка, пробуем просто добавить заголовки
+            try:
+                self.worksheet.insert_row(header_row2, 1)
+                self.worksheet.insert_row(header_row1, 1)
+            except Exception as e2:
+                print(f"Error adding headers as fallback: {e2}")
     
     def add_order(self, order: Dict):
-        """Добавить заказ в таблицу (создает несколько строк - по одной на каждый вариант букета)"""
+        """Добавить заказ в таблицу (создает две строки: количество букетов и количество тюльпанов по вариантам)"""
         if not self.worksheet:
             print("Warning: Google Sheets not connected")
             return
@@ -99,17 +206,6 @@ class GoogleSheets:
         if username and not username.startswith("@"):
             username = f"@{username}"
         
-        # Получаем телефон
-        phone = order.get("phone", "")
-        
-        # Объединяем телеграм и телефон в один столбец
-        contact_info = []
-        if username:
-            contact_info.append(username)
-        if phone:
-            contact_info.append(phone)
-        contact_str = " / ".join(contact_info) if contact_info else ""
-        
         total_price = order.get("total_price", 0)
         
         # Определяем статус для отображения
@@ -118,47 +214,88 @@ class GoogleSheets:
         # Сумма оплаты (равна сумме заказа, если оплачен)
         payment_amount = total_price if status == "paid" else 0
         
-        # Создаем строку для каждого варианта букета
-        rows_to_add = []
+        # Группируем букеты по варианту
+        # Словарь: {variant_num: {"bouquet_count": сумма букетов, "tulip_count": сумма тюльпанов}}
+        variants_data = {}
         bouquets = order.get("bouquets", [])
+        
+        total_bouquets = 0
+        total_tulips = 0
         
         for bouquet in bouquets:
             variant_num = bouquet.get("variant", "")
             count = bouquet.get("count", 0)  # количество букетов этого варианта
             quantity = bouquet.get("quantity", 0)  # количество тюльпанов в букете
-            total_tulips = count * quantity  # итого тюльпанов для этого варианта
+            tulips_for_variant = count * quantity  # итого тюльпанов для этого варианта
             
-            row = [
-                status_display,
-                order_number,
-                date_time,
-                full_name,
-                contact_str,  # объединенные телеграм и телефон
-                variant_num,
-                count,
-                quantity,
-                total_tulips,
-                total_price,  # общая сумма заказа (повторяется для всех строк)
-                payment_amount,  # сумма оплаты (повторяется для всех строк)
-                ""  # возврат (пусто по умолчанию)
-            ]
-            rows_to_add.append(row)
+            if variant_num not in variants_data:
+                variants_data[variant_num] = {"bouquet_count": 0, "tulip_count": 0}
+            
+            variants_data[variant_num]["bouquet_count"] += count
+            variants_data[variant_num]["tulip_count"] += tulips_for_variant
+            
+            total_bouquets += count
+            total_tulips += tulips_for_variant
         
-        # Добавляем все строки заказа
-        if rows_to_add:
-            self.worksheet.append_rows(rows_to_add)
+        # Создаем первую строку: количество букетов по вариантам
+        row1 = [
+            status_display,
+            order_number,
+            date_time,
+            full_name,
+            username,
+            "",  # № варианта (заголовок)
+            variants_data.get(1, {}).get("bouquet_count", ""),  # вариант 1
+            variants_data.get(2, {}).get("bouquet_count", ""),  # вариант 2
+            variants_data.get(3, {}).get("bouquet_count", ""),  # вариант 3
+            variants_data.get(4, {}).get("bouquet_count", ""),  # вариант 4
+            variants_data.get(5, {}).get("bouquet_count", ""),  # вариант 5
+            variants_data.get(6, {}).get("bouquet_count", ""),  # вариант 6
+            total_bouquets,  # итого букетов
+            total_tulips,  # итого тюльпанов
+            total_price,  # сумма
+            payment_amount,  # оплата
+            ""  # возврат
+        ]
+        
+        # Создаем вторую строку: количество тюльпанов по вариантам
+        row2 = [
+            "",  # статус
+            "",  # № заказа
+            "",  # дата и время готовности
+            "",  # Фамилия, Имя
+            "",  # @ телеграм
+            "",  # № варианта
+            variants_data.get(1, {}).get("tulip_count", ""),  # вариант 1
+            variants_data.get(2, {}).get("tulip_count", ""),  # вариант 2
+            variants_data.get(3, {}).get("tulip_count", ""),  # вариант 3
+            variants_data.get(4, {}).get("tulip_count", ""),  # вариант 4
+            variants_data.get(5, {}).get("tulip_count", ""),  # вариант 5
+            variants_data.get(6, {}).get("tulip_count", ""),  # вариант 6
+            "",  # итого букетов
+            "",  # итого тюльпанов
+            "",  # сумма
+            "",  # оплата
+            ""   # возврат
+        ]
+        
+        # Добавляем обе строки заказа
+        self.worksheet.append_rows([row1, row2])
     
     def update_order_status(self, order_number: str, status: str, **kwargs):
-        """Обновить статус заказа в таблице (обновляет все строки заказа)"""
+        """Обновить статус заказа в таблице (обновляет первую строку заказа, где находятся статус, сумма, оплата, возврат)"""
         if not self.worksheet:
             return
         
         try:
-            # Найти все строки с номером заказа (заказ может занимать несколько строк)
+            # Найти первую строку с номером заказа (заказ занимает две строки: первая - количество букетов, вторая - количество тюльпанов)
             cells = self.worksheet.findall(order_number)
             if not cells:
                 print(f"Order {order_number} not found in sheet")
                 return
+            
+            # Берем первую найденную строку (это строка с количеством букетов, где находятся статус, сумма, оплата, возврат)
+            first_row = cells[0].row
             
             # Определяем статус для отображения
             status_display = "оплачен" if status == "paid" else "отменен" if status == "cancelled" else "ожидает оплаты"
@@ -169,28 +306,26 @@ class GoogleSheets:
                 total_price = order.get("total_price", 0)
                 payment_amount = total_price if status == "paid" else 0
             else:
-                # Если заказ не передан, пытаемся получить сумму из существующих строк
-                first_row = cells[0].row
+                # Если заказ не передан, пытаемся получить сумму из существующей строки
                 try:
-                    total_price = self.worksheet.cell(first_row, 10).value  # колонка "сумма" (теперь 10-я после объединения телеграма и телефона)
+                    # Колонка "сумма" = 15 (после: статус, № заказа, дата, имя, телеграм, № варианта, 6 вариантов, итого букетов, итого тюльпанов)
+                    total_price = self.worksheet.cell(first_row, 15).value
                     payment_amount = total_price if status == "paid" else 0
                 except:
                     payment_amount = 0
             
             refund_amount = kwargs.get("refund_amount", "")
             
-            # Обновляем все строки заказа
-            for cell in cells:
-                row = cell.row
-                # Обновить статус (колонка 1)
-                self.worksheet.update_cell(row, 1, status_display)
-                
-                # Обновить сумму оплаты (колонка 11 - "оплата")
-                self.worksheet.update_cell(row, 11, payment_amount)
-                
-                # Обновить возврат (колонка 12 - "возврат") если есть
-                if refund_amount:
-                    self.worksheet.update_cell(row, 12, refund_amount)
+            # Обновляем первую строку заказа
+            # Статус (колонка 1)
+            self.worksheet.update_cell(first_row, 1, status_display)
+            
+            # Сумма оплаты (колонка 16 - "оплата")
+            self.worksheet.update_cell(first_row, 16, payment_amount)
+            
+            # Возврат (колонка 17 - "возврат") если есть
+            if refund_amount:
+                self.worksheet.update_cell(first_row, 17, refund_amount)
                     
         except Exception as e:
             print(f"Error updating order {order_number} in sheet: {e}")

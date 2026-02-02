@@ -35,6 +35,15 @@ async def main():
         logger.error("BOT_TOKEN не установлен в переменных окружения!")
         return
     
+    # Инициализация Google Sheets и запись заголовков
+    try:
+        from google_sheets import GoogleSheets
+        sheets = GoogleSheets()
+        sheets.init_headers()
+        logger.info("Заголовки таблицы Google Sheets инициализированы")
+    except Exception as e:
+        logger.warning(f"Не удалось инициализировать заголовки Google Sheets: {e}")
+    
     # Инициализация бота и диспетчера
     bot = Bot(token=Config.BOT_TOKEN)
     storage = MemoryStorage()

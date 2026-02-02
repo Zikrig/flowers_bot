@@ -216,7 +216,8 @@ async def bouquet_selected(callback: CallbackQuery, state: FSMContext):
     
     text = (
         f"Вы выбрали букет №{variant_num} — «{variant['name']}»\n\n"
-        "Выберете количество:\n"
+        "(Пример размера букетов 15 и 25 шт).\n\n"
+        "Выберите количество тюльпанов:\n\n"
         f"Если вам нужно другое количество – напишите в личные сообщения {', '.join(Config.ADMIN_CONTACTS)}"
     )
     
