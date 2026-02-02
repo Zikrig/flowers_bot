@@ -290,6 +290,8 @@ async def show_bouquet_count_selection(message_or_callback, state: FSMContext, v
                 InlineKeyboardButton(text="➖", callback_data=f"change_count_{variant_num}_{quantity}_-1"),
                 InlineKeyboardButton(text="➕", callback_data=f"change_count_{variant_num}_{quantity}_+1")
             ],
+            
+            [InlineKeyboardButton(text="➕ Добавить другие букеты", callback_data="add_new_bouquet")],
             [InlineKeyboardButton(text="📋 Редактировать другие букеты", callback_data="more_yes")],
             [InlineKeyboardButton(text="💳 ПЕРЕЙТИ К ОПЛАТЕ", callback_data="more_no")]
         ])
@@ -449,10 +451,8 @@ async def select_more_bouquets(callback: CallbackQuery, state: FSMContext):
         text = "\n".join(text_parts)
         
         # Добавляем кнопку "Добавить другие букеты" под кнопками редактирования (если они есть)
-        if not is_first_bouquet:
-            buttons.append([InlineKeyboardButton(text="➕ Добавить другие букеты", callback_data="add_new_bouquet")])
-        else:
-            buttons.append([InlineKeyboardButton(text="➕ Добавить другие букеты", callback_data="add_new_bouquet")])
+
+        buttons.append([InlineKeyboardButton(text="➕ Добавить другие букеты", callback_data="add_new_bouquet")])
         
         buttons.append([InlineKeyboardButton(text="💳 ПЕРЕЙТИ К ОПЛАТЕ", callback_data="more_no")])
         

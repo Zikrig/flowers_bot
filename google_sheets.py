@@ -101,7 +101,7 @@ class GoogleSheets:
         
         if not self.worksheet:
             print("Warning: Google Sheets not connected")
-            return
+            return False
         
         # Первая строка заголовков
         header_row1 = [
@@ -148,20 +148,28 @@ class GoogleSheets:
             # Всегда обновляем первые две строки через update
             # Если строк меньше двух, добавляем недостающие
             if len(all_values) >= 2:
-                # Обновляем существующие первые две строки
-                self.worksheet.update('A1:P1', [header_row1])
-                self.worksheet.update('A2:P2', [header_row2])
-                print("Updated existing header rows")
+                # Сначала удаляем старые заголовки, потом вставляем новые
+                # Это гарантирует, что заголовки будут правильными
+                print("Deleting old header rows...")
+                self.worksheet.delete_rows(1, 2)
+                print("Inserting new header rows...")
+                # Вставляем новые заголовки в начало
+                self.worksheet.insert_row(header_row2, 1)  # Сначала вторую строку
+                self.worksheet.insert_row(header_row1, 1)  # Потом первую строку (она будет выше)
+                print("Successfully replaced header rows")
+                return True
             elif len(all_values) == 1:
                 # Обновляем первую строку и добавляем вторую
-                self.worksheet.update('A1:P1', [header_row1])
+                result1 = self.worksheet.update('A1:P1', [header_row1])
                 self.worksheet.insert_row(header_row2, 2)
-                print("Updated first row and inserted second row")
+                print(f"Updated first row and inserted second row. Result: {result1}")
+                return True
             else:
                 # Если таблица пустая, вставляем заголовки
                 self.worksheet.insert_row(header_row2, 1)  # Сначала вторую строку
                 self.worksheet.insert_row(header_row1, 1)  # Потом первую строку (она будет выше)
                 print("Inserted header rows into empty sheet")
+                return True
             
         except Exception as e:
             print(f"Error initializing headers: {e}")
@@ -179,10 +187,12 @@ class GoogleSheets:
                 self.worksheet.insert_row(header_row2, 1)
                 self.worksheet.insert_row(header_row1, 1)
                 print("Used fallback method to insert headers")
+                return True
             except Exception as e2:
                 print(f"Error adding headers as fallback: {e2}")
                 import traceback
                 traceback.print_exc()
+                return False
     
     def add_order(self, order: Dict):
         """Добавить заказ в таблицу (создает две строки: количество букетов и количество тюльпанов по вариантам)"""

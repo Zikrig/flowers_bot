@@ -39,10 +39,13 @@ async def main():
     try:
         from google_sheets import GoogleSheets
         sheets = GoogleSheets()
-        sheets.init_headers()
-        logger.info("Заголовки таблицы Google Sheets инициализированы")
+        success = sheets.init_headers()
+        if success:
+            logger.info("Заголовки таблицы Google Sheets инициализированы")
+        else:
+            logger.error("Не удалось инициализировать заголовки Google Sheets")
     except Exception as e:
-        logger.warning(f"Не удалось инициализировать заголовки Google Sheets: {e}")
+        logger.error(f"Ошибка при инициализации заголовков Google Sheets: {e}", exc_info=True)
     
     # Инициализация бота и диспетчера
     bot = Bot(token=Config.BOT_TOKEN)
