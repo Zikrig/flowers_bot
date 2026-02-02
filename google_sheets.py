@@ -15,6 +15,11 @@ class GoogleSheets:
         self.worksheet = None
         self._connect()
     
+    def ensure_connected(self):
+        """Убедиться, что подключение установлено"""
+        if not self.worksheet and self.sheet_id:
+            self._connect()
+    
     def _connect(self):
         """Подключение к Google Sheets"""
         if not os.path.exists(self.credentials_path):
@@ -91,6 +96,9 @@ class GoogleSheets:
     
     def init_headers(self):
         """Инициализация заголовков таблицы при каждом запуске (перезаписывает первые две строки)"""
+        # Убеждаемся, что подключение установлено
+        self.ensure_connected()
+        
         if not self.worksheet:
             print("Warning: Google Sheets not connected")
             return
@@ -135,44 +143,46 @@ class GoogleSheets:
             # Получаем все данные из таблицы
             all_values = self.worksheet.get_all_values()
             
-            # Если в таблице есть хотя бы две строки, обновляем их
+            print(f"Initializing headers. Current rows in sheet: {len(all_values)}")
+            
+            # Всегда обновляем первые две строки через update
+            # Если строк меньше двух, добавляем недостающие
             if len(all_values) >= 2:
-                # Обновляем первые две строки через batch_update
-                self.worksheet.batch_update([
-                    {
-                        'range': 'A1:P1',
-                        'values': [header_row1]
-                    },
-                    {
-                        'range': 'A2:P2',
-                        'values': [header_row2]
-                    }
-                ])
+                # Обновляем существующие первые две строки
+                self.worksheet.update('A1:P1', [header_row1])
+                self.worksheet.update('A2:P2', [header_row2])
+                print("Updated existing header rows")
             elif len(all_values) == 1:
-                # Если есть только одна строка, обновляем её и добавляем вторую
-                self.worksheet.batch_update([
-                    {
-                        'range': 'A1:P1',
-                        'values': [header_row1]
-                    },
-                    {
-                        'range': 'A2:P2',
-                        'values': [header_row2]
-                    }
-                ])
+                # Обновляем первую строку и добавляем вторую
+                self.worksheet.update('A1:P1', [header_row1])
+                self.worksheet.insert_row(header_row2, 2)
+                print("Updated first row and inserted second row")
             else:
                 # Если таблица пустая, вставляем заголовки
                 self.worksheet.insert_row(header_row2, 1)  # Сначала вторую строку
                 self.worksheet.insert_row(header_row1, 1)  # Потом первую строку (она будет выше)
+                print("Inserted header rows into empty sheet")
             
         except Exception as e:
             print(f"Error initializing headers: {e}")
-            # Если произошла ошибка, пробуем просто добавить заголовки
+            import traceback
+            traceback.print_exc()
+            # Если произошла ошибка, пробуем другой способ
             try:
+                # Пробуем удалить первые две строки и вставить новые
+                all_values = self.worksheet.get_all_values()
+                if len(all_values) >= 2:
+                    self.worksheet.delete_rows(1, 2)
+                elif len(all_values) == 1:
+                    self.worksheet.delete_rows(1, 1)
+                # Вставляем новые заголовки
                 self.worksheet.insert_row(header_row2, 1)
                 self.worksheet.insert_row(header_row1, 1)
+                print("Used fallback method to insert headers")
             except Exception as e2:
                 print(f"Error adding headers as fallback: {e2}")
+                import traceback
+                traceback.print_exc()
     
     def add_order(self, order: Dict):
         """Добавить заказ в таблицу (создает две строки: количество букетов и количество тюльпанов по вариантам)"""
