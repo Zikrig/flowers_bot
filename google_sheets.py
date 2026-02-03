@@ -422,7 +422,7 @@ class GoogleSheets:
             date_time,
             full_name,
             username,
-            "",  # № варианта (заголовок)
+            # "",  # № варианта (заголовок)
             variants_data.get(1, {}).get("bouquet_count", ""),  # вариант 1
             variants_data.get(2, {}).get("bouquet_count", ""),  # вариант 2
             variants_data.get(3, {}).get("bouquet_count", ""),  # вариант 3
