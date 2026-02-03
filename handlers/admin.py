@@ -12,6 +12,19 @@ db = Database()
 sheets = GoogleSheets()
 
 
+admin_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Все заказы", callback_data="admin_all_orders")],
+        [
+            InlineKeyboardButton(text="⏳ Ожидают оплаты", callback_data="admin_pending"),
+            InlineKeyboardButton(text="✅ Оплаченные", callback_data="admin_paid")
+        ],
+        [
+            InlineKeyboardButton(text="📅 Заказы на сегодня", callback_data="admin_today"),
+            InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")
+        ],
+        [InlineKeyboardButton(text="🔍 Найти заказ", callback_data="admin_search_order")]
+    ])
+
 def is_admin(user_id: int) -> bool:
     """Проверка, является ли пользователь администратором"""
     return user_id in Config.ADMIN_IDS
@@ -29,18 +42,7 @@ async def admin_menu(message: Message):
         "Выберите действие:"
     )
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Все заказы", callback_data="admin_all_orders")],
-        [
-            InlineKeyboardButton(text="⏳ Ожидают оплаты", callback_data="admin_pending"),
-            InlineKeyboardButton(text="✅ Оплаченные", callback_data="admin_paid")
-        ],
-        [
-            InlineKeyboardButton(text="📅 Заказы на сегодня", callback_data="admin_today"),
-            InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")
-        ],
-        [InlineKeyboardButton(text="🔍 Найти заказ", callback_data="admin_search_order")]
-    ])
+    keyboard = admin_keyboard
     
     await message.answer(text, reply_markup=keyboard)
 
@@ -299,21 +301,7 @@ async def admin_menu_callback(callback: CallbackQuery):
         "Выберите действие:"
     )
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Все заказы", callback_data="admin_all_orders")],
-        [
-            InlineKeyboardButton(text="⏳ Ожидают оплаты", callback_data="admin_pending"),
-            InlineKeyboardButton(text="✅ Оплаченные", callback_data="admin_paid")
-        ],
-        [
-            InlineKeyboardButton(text="📅 Заказы на сегодня", callback_data="admin_today"),
-            InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")
-        ],
-        [
-            InlineKeyboardButton(text="🔍 Найти заказ", callback_data="admin_search_order"),
-            InlineKeyboardButton(text="📦 Остатки", callback_data="admin_stock")
-        ]
-    ])
+    keyboard = admin_keyboard
     
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
