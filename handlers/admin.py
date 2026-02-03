@@ -22,7 +22,9 @@ admin_keyboard = InlineKeyboardMarkup(inline_keyboard=[
             InlineKeyboardButton(text="📅 Заказы на сегодня", callback_data="admin_today"),
             InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")
         ],
-        [InlineKeyboardButton(text="🔍 Найти заказ", callback_data="admin_search_order")]
+        [InlineKeyboardButton(text="🔍 Найти заказ", callback_data="admin_search_order")],
+        [InlineKeyboardButton(text="Остатки", callback_data="admin_stock")]
+        
     ])
 
 def is_admin(user_id: int) -> bool:
