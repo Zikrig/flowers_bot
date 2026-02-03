@@ -519,7 +519,7 @@ class GoogleSheets:
             
             # Сумма оплаты (колонка 16 - "оплата")
             self.worksheet.update_cell(first_row, 16, payment_amount)
-            
+                
             # Возврат (колонка 17 - "возврат") если есть
             if refund_amount:
                 self.worksheet.update_cell(first_row, 17, refund_amount)

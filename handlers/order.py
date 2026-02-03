@@ -39,38 +39,27 @@ class OrderStates(StatesGroup):
 async def show_bouquet_selection(message_or_callback, state: FSMContext):
     """Показать варианты букетов"""
     # Получаем user_id из message или callback
-    if hasattr(message_or_callback, 'from_user'):
-        user_id = message_or_callback.from_user.id
-    elif hasattr(message_or_callback, 'message'):
-        user_id = message_or_callback.message.from_user.id
-    else:
-        user_id = None
+    user_id = message_or_callback.chat.id
     
-    if not user_id:
-        # Пробуем получить из chat
-        if hasattr(message_or_callback, 'chat'):
-            user_id = message_or_callback.chat.id
-        elif hasattr(message_or_callback, 'message') and hasattr(message_or_callback.message, 'chat'):
-            user_id = message_or_callback.message.chat.id
-        else:
-            # Если это callback, пробуем через message
-            if hasattr(message_or_callback, 'message'):
-                await message_or_callback.message.answer("Ошибка: не удалось определить пользователя.")
-            return
-    
-    # Проверяем, является ли пользователь администратором
-    if user_id in Config.ADMIN_IDS:
-        # Администратор пропускает запрос согласия
-        await show_bouquet_options(message_or_callback, state)
-        return
     
     # Проверяем, есть ли у пользователя согласие
     user = await db.get_user(user_id)
-    if user and user.get("consent_given"):
+    
+    # Логирование для диагностики
+    logger.info(f"Проверка согласия для user_id={user_id} (type: {type(user_id)}), user={user}")
+    if user:
+        logger.info(f"consent_given={user.get('consent_given')} (type: {type(user.get('consent_given'))})")
+    
+    # Проверяем согласие - должно быть булево True
+    has_consent = user and user.get("consent_given") is True
+    
+    if has_consent:
         # У пользователя уже есть согласие, сразу показываем букеты
+        logger.info(f"У пользователя {user_id} уже есть согласие, показываем букеты")
         await show_bouquet_options(message_or_callback, state)
     else:
         # Нужно получить согласие
+        logger.info(f"У пользователя {user_id} нет согласия (user={user is not None}, consent={user.get('consent_given') if user else None}), запрашиваем")
         await state.set_state(OrderStates.waiting_consent)
         
         consent_text = (
@@ -564,14 +553,43 @@ async def time_selected(callback: CallbackQuery, state: FSMContext):
     time_str = callback.data.replace("time_", "")
     
     await state.update_data(pickup_time=time_str)
-    await state.set_state(OrderStates.entering_name)
     
-    # Всегда запрашиваем текстовый ввод имени
-    await callback.message.answer(
-        "Отлично! Осталось совсем немного.\n\n"
-        "Пожалуйста, отправьте ваше Имя и Фамилию через пробел.\n"
-        "Например: Иван Иванов"
-    )
+    # Проверяем, есть ли у пользователя уже имя и телефон в базе
+    user_id = callback.from_user.id
+    user = await db.get_user(user_id)
+    
+    has_name = user and user.get("first_name") and user.get("last_name") and user.get("first_name").strip() and user.get("last_name").strip()
+    has_phone = user and user.get("phone") and user.get("phone").strip()
+    
+    if has_name and has_phone:
+        # У пользователя уже есть имя и телефон, используем их
+        await state.update_data(
+            first_name=user.get("first_name"),
+            last_name=user.get("last_name"),
+            phone=user.get("phone")
+        )
+        # Переходим сразу к подтверждению заказа
+        await process_order_confirmation(callback, state)
+    elif has_name:
+        # Есть имя, но нет телефона - запрашиваем только телефон
+        await state.update_data(
+            first_name=user.get("first_name"),
+            last_name=user.get("last_name")
+        )
+        await state.set_state(OrderStates.entering_phone)
+        await callback.message.answer(
+            "Отлично! Укажите ваш номер телефона.\n"
+            "Например: +79991234567 или 89991234567"
+        )
+    else:
+        # Нет имени - запрашиваем имя
+        await state.set_state(OrderStates.entering_name)
+        await callback.message.answer(
+            "Отлично! Осталось совсем немного.\n\n"
+            "Пожалуйста, отправьте ваше Имя и Фамилию через пробел.\n"
+            "Например: Иван Иванов"
+        )
+    
     await callback.answer()
 
 
@@ -633,6 +651,11 @@ async def phone_entered(message: Message, state: FSMContext):
         return
     
     await state.update_data(phone=phone_normalized)
+    
+    # Сохраняем телефон в базу пользователей
+    await db.save_user(message.from_user.id, {
+        "phone": phone_normalized
+    })
     
     # Переходим к подтверждению заказа
     await process_order_confirmation_from_message(message, state)
@@ -751,48 +774,84 @@ async def process_order_confirmation_from_message(message: Message, state: FSMCo
     await state.set_state(OrderStates.confirming_order)
 
 
-@router.callback_query(F.data == "confirm_order", StateFilter(OrderStates.confirming_order))
+@router.callback_query(F.data == "confirm_order")
 async def order_confirmed(callback: CallbackQuery, state: FSMContext):
     """Подтверждение заказа"""
-    data = await state.get_data()
-    
-    # Сохранение заказа
-    order_data = {
-        "user_id": callback.from_user.id,
-        "first_name": data.get("first_name"),
-        "last_name": data.get("last_name"),
-        "username": data.get("username", ""),
-        "phone": data.get("phone", ""),
-        "bouquets": data.get("bouquets", []),
-        "pickup_date": data.get("pickup_date"),
-        "pickup_time": data.get("pickup_time"),
-        "total_price": data.get("total_price", 0),
-        "status": "pending_payment"
-    }
-    
-    order_number = await db.save_order(order_data)
-    
-    await state.update_data(order_number=order_number)
-    await state.set_state(OrderStates.waiting_payment)
-    
-    payment_text = (
-        f"Спасибо! Ваш заказ принят.\n\n"
-        f"💳 Оплатите {data.get('total_price', 0):,} ₽ по реквизитам:\n"
-        f"перевод СБЕРБАНК получатель {Config.PAYMENT_RECEIVER}\n"
-        f"{Config.PAYMENT_PHONE}\n\n"
-        "❗ Важно:\n"
-        "Оплатить нужно в течение 24 часов с момента оформления заказа.\n"
-        "Если оплата не поступит — заказ автоматически отменится.\n\n"
-        "После оплаты нажмите кнопку «Отправить чек» и отправьте фотографию или файл с квитанцией об оплате.\n"
-        "Мы проверим поступление средств и обязательно подтвердим оплату в этом чате."
-    )
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📎 Отправить чек", callback_data="send_receipt")]
-    ])
-    
-    await callback.message.answer(payment_text, reply_markup=keyboard)
-    await callback.answer()
+    try:
+        logger.info(f"Подтверждение заказа пользователем {callback.from_user.id}")
+        data = await state.get_data()
+        logger.info(f"Данные из state: {list(data.keys())}")
+        
+        # Проверяем наличие обязательных данных
+        if not data.get("bouquets"):
+            logger.error("Нет букетов в данных заказа")
+            await callback.answer("Ошибка: не найдены букеты в заказе", show_alert=True)
+            return
+        
+        if not data.get("pickup_date") or not data.get("pickup_time"):
+            logger.error("Нет даты/времени самовывоза")
+            await callback.answer("Ошибка: не указаны дата и время самовывоза", show_alert=True)
+            return
+        
+        # Сохраняем имя и телефон в базу пользователей (если они есть)
+        user_update_data = {}
+        if data.get("first_name"):
+            user_update_data["first_name"] = data.get("first_name")
+        if data.get("last_name"):
+            user_update_data["last_name"] = data.get("last_name")
+        if data.get("phone"):
+            user_update_data["phone"] = data.get("phone")
+        if data.get("username"):
+            user_update_data["username"] = data.get("username")
+        
+        if user_update_data:
+            await db.save_user(callback.from_user.id, user_update_data)
+            logger.info(f"Сохранены данные пользователя: {list(user_update_data.keys())}")
+        
+        # Сохранение заказа
+        order_data = {
+            "user_id": callback.from_user.id,
+            "first_name": data.get("first_name"),
+            "last_name": data.get("last_name"),
+            "username": data.get("username", ""),
+            "phone": data.get("phone", ""),
+            "bouquets": data.get("bouquets", []),
+            "pickup_date": data.get("pickup_date"),
+            "pickup_time": data.get("pickup_time"),
+            "total_price": data.get("total_price", 0),
+            "status": "pending_payment"
+        }
+        
+        logger.info(f"Сохранение заказа: {order_data.get('bouquets')}, сумма: {order_data.get('total_price')}")
+        order_number = await db.save_order(order_data)
+        logger.info(f"Заказ сохранен с номером: {order_number}")
+        
+        await state.update_data(order_number=order_number)
+        await state.set_state(OrderStates.waiting_payment)
+        
+        payment_text = (
+            f"Спасибо! Ваш заказ принят.\n\n"
+            f"💳 Оплатите {data.get('total_price', 0):,} ₽ по реквизитам:\n"
+            f"перевод СБЕРБАНК получатель {Config.PAYMENT_RECEIVER}\n"
+            f"{Config.PAYMENT_PHONE}\n\n"
+            "❗ Важно:\n"
+            "Оплатить нужно в течение 24 часов с момента оформления заказа.\n"
+            "Если оплата не поступит — заказ автоматически отменится.\n\n"
+            "После оплаты нажмите кнопку «Отправить чек» и отправьте фотографию или файл с квитанцией об оплате.\n"
+            "Мы проверим поступление средств и обязательно подтвердим оплату в этом чате."
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📎 Отправить чек", callback_data="send_receipt")]
+        ])
+        
+        await callback.message.answer(payment_text, reply_markup=keyboard)
+        await callback.answer("Заказ подтвержден!")
+        logger.info(f"Заказ {order_number} успешно подтвержден")
+        
+    except Exception as e:
+        logger.error(f"Ошибка при подтверждении заказа: {e}", exc_info=True)
+        await callback.answer(f"Произошла ошибка: {str(e)}", show_alert=True)
 
 
 @router.callback_query(F.data == "edit_order_bouquets")

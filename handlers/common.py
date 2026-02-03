@@ -18,20 +18,38 @@ async def cmd_start(message: Message, state: FSMContext):
     # Сохраняем/обновляем данные пользователя из Telegram
     user = message.from_user
     
-    # Получаем существующие данные пользователя (включая согласие)
+    # Получаем существующие данные пользователя (включая согласие, имя, телефон)
     existing_user = await db.get_user(user.id)
     
-    # Сохраняем согласие, если оно уже было дано (не перезаписываем)
+    # Сохраняем данные пользователя, но НЕ перезаписываем имя и телефон, если они уже есть
     user_data = {
-        "first_name": user.first_name or "",
-        "last_name": user.last_name or "",
         "username": user.username or "",
         "telegram_id": user.id
     }
     
+    # Если у пользователя уже есть имя в базе (и оно не пустое), не перезаписываем его
+    # Иначе используем имя из Telegram
+    if existing_user and existing_user.get("first_name") and existing_user.get("first_name").strip():
+        user_data["first_name"] = existing_user.get("first_name")
+    else:
+        user_data["first_name"] = user.first_name or ""
+    
+    if existing_user and existing_user.get("last_name") and existing_user.get("last_name").strip():
+        user_data["last_name"] = existing_user.get("last_name")
+    else:
+        user_data["last_name"] = user.last_name or ""
+    
+    # Сохраняем телефон, если он есть в базе
+    if existing_user and existing_user.get("phone"):
+        user_data["phone"] = existing_user.get("phone")
+    
     # Если у пользователя уже есть согласие, сохраняем его
-    if existing_user and existing_user.get("consent_given"):
+    # Проверяем явно на True, чтобы не потерять согласие
+    if existing_user and existing_user.get("consent_given") is True:
         user_data["consent_given"] = True
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Сохранение согласия для пользователя {user.id} при /start")
     
     await db.save_user(user.id, user_data)
     

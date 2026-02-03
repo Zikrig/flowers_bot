@@ -1,8 +1,11 @@
 import json
 import os
+import logging
 from typing import Dict, List, Optional
 from datetime import datetime
 import aiofiles
+
+logger = logging.getLogger(__name__)
 
 
 class Database:
@@ -62,17 +65,36 @@ class Database:
     
     async def get_order(self, order_number: str) -> Optional[Dict]:
         """Получить заказ по номеру"""
-        async with aiofiles.open(self.orders_file, "r", encoding="utf-8") as f:
-            content = await f.read()
-            orders = json.loads(content) if content else {}
+        try:
+            async with aiofiles.open(self.orders_file, "r", encoding="utf-8") as f:
+                content = await f.read()
+                if not content or not content.strip():
+                    return None
+                orders = json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка парсинга JSON в {self.orders_file}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Ошибка при чтении {self.orders_file}: {e}", exc_info=True)
+            return None
         
         return orders.get(order_number)
     
     async def update_order_status(self, order_number: str, status: str, **kwargs):
         """Обновить статус заказа"""
-        async with aiofiles.open(self.orders_file, "r", encoding="utf-8") as f:
-            content = await f.read()
-            orders = json.loads(content) if content else {}
+        try:
+            async with aiofiles.open(self.orders_file, "r", encoding="utf-8") as f:
+                content = await f.read()
+                if not content or not content.strip():
+                    orders = {}
+                else:
+                    orders = json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка парсинга JSON в {self.orders_file}: {e}")
+            orders = {}
+        except Exception as e:
+            logger.error(f"Ошибка при чтении {self.orders_file}: {e}", exc_info=True)
+            orders = {}
         
         if order_number in orders:
             orders[order_number]["status"] = status
@@ -86,38 +108,155 @@ class Database:
     
     async def get_user_orders(self, user_id: int) -> List[Dict]:
         """Получить все заказы пользователя"""
-        async with aiofiles.open(self.orders_file, "r", encoding="utf-8") as f:
-            content = await f.read()
-            orders = json.loads(content) if content else {}
+        try:
+            async with aiofiles.open(self.orders_file, "r", encoding="utf-8") as f:
+                content = await f.read()
+                if not content or not content.strip():
+                    return []
+                orders = json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка парсинга JSON в {self.orders_file}: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Ошибка при чтении {self.orders_file}: {e}", exc_info=True)
+            return []
         
         return [order for order in orders.values() if order.get("user_id") == user_id]
     
     async def get_all_orders(self) -> Dict[str, Dict]:
         """Получить все заказы"""
-        async with aiofiles.open(self.orders_file, "r", encoding="utf-8") as f:
-            content = await f.read()
-            return json.loads(content) if content else {}
+        try:
+            async with aiofiles.open(self.orders_file, "r", encoding="utf-8") as f:
+                content = await f.read()
+                if not content or not content.strip():
+                    return {}
+                return json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка парсинга JSON в {self.orders_file}: {e}")
+            return {}
+        except Exception as e:
+            logger.error(f"Ошибка при чтении {self.orders_file}: {e}", exc_info=True)
+            return {}
     
     async def get_user(self, user_id: int) -> Optional[Dict]:
         """Получить данные пользователя"""
-        async with aiofiles.open(self.users_file, "r", encoding="utf-8") as f:
-            content = await f.read()
-            users = json.loads(content) if content else {}
+        try:
+            async with aiofiles.open(self.users_file, "r", encoding="utf-8") as f:
+                content = await f.read()
+                if not content or not content.strip():
+                    return None
+                users = json.loads(content)
+        except json.JSONDecodeError as e:
+            # Файл поврежден - пытаемся восстановить
+            logger.error(f"Ошибка парсинга JSON в {self.users_file}: {e}. Попытка восстановления...")
+            try:
+                # Пытаемся найти первый валидный JSON объект
+                content = content.strip()
+                # Ищем первую открывающую скобку
+                start_idx = content.find('{')
+                if start_idx != -1:
+                    # Пытаемся найти соответствующую закрывающую скобку
+                    brace_count = 0
+                    end_idx = start_idx
+                    for i in range(start_idx, len(content)):
+                        if content[i] == '{':
+                            brace_count += 1
+                        elif content[i] == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                end_idx = i + 1
+                                break
+                    
+                    if brace_count == 0:
+                        # Нашли валидный JSON объект
+                        valid_content = content[start_idx:end_idx]
+                        users = json.loads(valid_content)
+                        # Сохраняем восстановленный файл
+                        async with aiofiles.open(self.users_file, "w", encoding="utf-8") as f:
+                            await f.write(json.dumps(users, ensure_ascii=False, indent=2))
+                        logger.info(f"Файл {self.users_file} восстановлен")
+                    else:
+                        # Не удалось восстановить - создаем пустой файл
+                        logger.warning(f"Не удалось восстановить {self.users_file}, создаем пустой файл")
+                        users = {}
+                        async with aiofiles.open(self.users_file, "w", encoding="utf-8") as f:
+                            await f.write(json.dumps(users, ensure_ascii=False, indent=2))
+                else:
+                    # Нет валидного JSON - создаем пустой файл
+                    users = {}
+                    async with aiofiles.open(self.users_file, "w", encoding="utf-8") as f:
+                        await f.write(json.dumps(users, ensure_ascii=False, indent=2))
+            except Exception as restore_error:
+                # Если восстановление не удалось - создаем пустой файл
+                logger.error(f"Не удалось восстановить файл: {restore_error}", exc_info=True)
+                users = {}
+                async with aiofiles.open(self.users_file, "w", encoding="utf-8") as f:
+                    await f.write(json.dumps(users, ensure_ascii=False, indent=2))
+        except Exception as e:
+            logger.error(f"Неожиданная ошибка при чтении {self.users_file}: {e}", exc_info=True)
+            return None
         
-        return users.get(str(user_id))
+        user = users.get(str(user_id))
+        if user:
+            logger.debug(f"Найден пользователь {user_id}: consent_given={user.get('consent_given')}, phone={user.get('phone')}, first_name={user.get('first_name')}")
+        else:
+            logger.warning(f"Пользователь {user_id} не найден в базе. Доступные ключи: {list(users.keys())[:10]}")
+        return user
     
     async def save_user(self, user_id: int, user_data: Dict):
         """Сохранить данные пользователя"""
-        async with aiofiles.open(self.users_file, "r", encoding="utf-8") as f:
-            content = await f.read()
-            users = json.loads(content) if content else {}
+        try:
+            async with aiofiles.open(self.users_file, "r", encoding="utf-8") as f:
+                content = await f.read()
+                if not content or not content.strip():
+                    users = {}
+                else:
+                    users = json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка парсинга JSON в {self.users_file} при сохранении: {e}. Создаем новый файл.")
+            # Если файл поврежден, начинаем с пустого словаря
+            users = {}
+            # Пытаемся восстановить данные из поврежденного файла
+            try:
+                content = content.strip()
+                start_idx = content.find('{')
+                if start_idx != -1:
+                    brace_count = 0
+                    end_idx = start_idx
+                    for i in range(start_idx, len(content)):
+                        if content[i] == '{':
+                            brace_count += 1
+                        elif content[i] == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                end_idx = i + 1
+                                break
+                    if brace_count == 0:
+                        valid_content = content[start_idx:end_idx]
+                        users = json.loads(valid_content)
+            except Exception:
+                pass  # Если не удалось восстановить, используем пустой словарь
+        except Exception as e:
+            logger.error(f"Ошибка при чтении {self.users_file}: {e}", exc_info=True)
+            users = {}
         
-        # Сохраняем существующие данные пользователя (например, consent_given)
+        # Сохраняем существующие данные пользователя (например, consent_given, phone, first_name, last_name)
         existing_user = users.get(str(user_id), {})
         
         # Если у пользователя уже есть согласие, сохраняем его (не перезаписываем на False)
         if existing_user.get("consent_given") and "consent_given" not in user_data:
             user_data["consent_given"] = True
+        
+        # Сохраняем телефон, если он уже есть и не перезаписывается
+        if existing_user.get("phone") and "phone" not in user_data:
+            user_data["phone"] = existing_user.get("phone")
+        
+        # Сохраняем имя, если оно уже есть и не перезаписывается (и не пустое)
+        if existing_user.get("first_name") and existing_user.get("first_name").strip() and "first_name" not in user_data:
+            user_data["first_name"] = existing_user.get("first_name")
+        
+        if existing_user.get("last_name") and existing_user.get("last_name").strip() and "last_name" not in user_data:
+            user_data["last_name"] = existing_user.get("last_name")
         
         users[str(user_id)] = {
             **existing_user,  # Сохраняем существующие данные
