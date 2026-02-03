@@ -309,11 +309,68 @@ async def admin_menu_callback(callback: CallbackQuery):
             InlineKeyboardButton(text="📅 Заказы на сегодня", callback_data="admin_today"),
             InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")
         ],
-        [InlineKeyboardButton(text="🔍 Найти заказ", callback_data="admin_search_order")]
+        [
+            InlineKeyboardButton(text="🔍 Найти заказ", callback_data="admin_search_order"),
+            InlineKeyboardButton(text="📦 Остатки", callback_data="admin_stock")
+        ]
     ])
     
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
+
+
+@router.callback_query(F.data == "admin_stock")
+async def admin_stock_menu(callback: CallbackQuery):
+    """Меню управления остатками"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("У вас нет прав администратора", show_alert=True)
+        return
+    
+    stock = await db.get_stock_status()
+    
+    text = "📦 Управление остатками\n\n"
+    text += "Выберите товар для включения/выключения:\n\n"
+    
+    buttons = []
+    for variant_num in range(1, 7):
+        variant_name = Config.BOUQUET_VARIANTS[variant_num]["name"]
+        is_available = stock.get(str(variant_num), True)
+        status_icon = "✅" if is_available else "❌"
+        status_text = "Доступен" if is_available else "Недоступен"
+        
+        text += f"{status_icon} №{variant_num} «{variant_name}» — {status_text}\n"
+        
+        button_text = f"{'✅' if is_available else '❌'} №{variant_num} «{variant_name}»"
+        buttons.append([InlineKeyboardButton(
+            text=button_text,
+            callback_data=f"admin_toggle_stock_{variant_num}"
+        )])
+    
+    buttons.append([InlineKeyboardButton(text="🔙 Назад в меню", callback_data="admin_menu")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await callback.message.answer(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_toggle_stock_"))
+async def admin_toggle_stock(callback: CallbackQuery):
+    """Переключить доступность товара"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("У вас нет прав администратора", show_alert=True)
+        return
+    
+    variant_num = int(callback.data.replace("admin_toggle_stock_", ""))
+    variant_name = Config.BOUQUET_VARIANTS[variant_num]["name"]
+    
+    new_status = await db.toggle_variant_stock(variant_num)
+    status_text = "включен" if new_status else "выключен"
+    
+    await callback.answer(f"Товар №{variant_num} «{variant_name}» {status_text}", show_alert=True)
+    
+    # Обновляем меню остатков
+    await admin_stock_menu(callback)
 
 
 @router.message(F.text.regexp(r'^\d{3}$'))
@@ -368,3 +425,57 @@ async def admin_order_found(message: Message, state: FSMContext):
     
     await message.answer(text, reply_markup=keyboard)
     await state.update_data(admin_searching=False)
+
+
+@router.callback_query(F.data == "admin_stock")
+async def admin_stock_menu(callback: CallbackQuery):
+    """Меню управления остатками"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("У вас нет прав администратора", show_alert=True)
+        return
+    
+    stock = await db.get_stock_status()
+    
+    text = "📦 Управление остатками\n\n"
+    text += "Выберите товар для включения/выключения:\n\n"
+    
+    buttons = []
+    for variant_num in range(1, 7):
+        variant_name = Config.BOUQUET_VARIANTS[variant_num]["name"]
+        is_available = stock.get(str(variant_num), True)
+        status_icon = "✅" if is_available else "❌"
+        status_text = "Доступен" if is_available else "Недоступен"
+        
+        text += f"{status_icon} №{variant_num} «{variant_name}» — {status_text}\n"
+        
+        button_text = f"{'✅' if is_available else '❌'} №{variant_num} «{variant_name}»"
+        buttons.append([InlineKeyboardButton(
+            text=button_text,
+            callback_data=f"admin_toggle_stock_{variant_num}"
+        )])
+    
+    buttons.append([InlineKeyboardButton(text="🔙 Назад в меню", callback_data="admin_menu")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await callback.message.answer(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_toggle_stock_"))
+async def admin_toggle_stock(callback: CallbackQuery):
+    """Переключить доступность товара"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("У вас нет прав администратора", show_alert=True)
+        return
+    
+    variant_num = int(callback.data.replace("admin_toggle_stock_", ""))
+    variant_name = Config.BOUQUET_VARIANTS[variant_num]["name"]
+    
+    new_status = await db.toggle_variant_stock(variant_num)
+    status_text = "включен" if new_status else "выключен"
+    
+    await callback.answer(f"Товар №{variant_num} «{variant_name}» {status_text}", show_alert=True)
+    
+    # Обновляем меню остатков
+    await admin_stock_menu(callback)

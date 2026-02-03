@@ -14,6 +14,7 @@ class Database:
         self.orders_file = os.path.join(data_dir, "orders.json")
         self.order_counter_file = os.path.join(data_dir, "order_counter.json")
         self.users_file = os.path.join(data_dir, "users.json")
+        self.stock_file = os.path.join(data_dir, "stock.json")
         os.makedirs(data_dir, exist_ok=True)
         self._init_files()
     
@@ -30,6 +31,12 @@ class Database:
         if not os.path.exists(self.users_file):
             with open(self.users_file, "w", encoding="utf-8") as f:
                 json.dump({}, f, ensure_ascii=False, indent=2)
+        
+        if not os.path.exists(self.stock_file):
+            # По умолчанию все товары доступны
+            stock = {str(i): True for i in range(1, 7)}
+            with open(self.stock_file, "w", encoding="utf-8") as f:
+                json.dump(stock, f, ensure_ascii=False, indent=2)
     
     async def get_next_order_number(self) -> str:
         """Получить следующий номер заказа"""
@@ -275,5 +282,49 @@ class Database:
             await self.save_user(user_id, user)
         else:
             await self.save_user(user_id, {"consent_given": consented})
+    
+    async def get_stock_status(self) -> Dict[str, bool]:
+        """Получить статус остатков товаров"""
+        try:
+            async with aiofiles.open(self.stock_file, "r", encoding="utf-8") as f:
+                content = await f.read()
+                if not content or not content.strip():
+                    # По умолчанию все товары доступны
+                    return {str(i): True for i in range(1, 7)}
+                return json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка парсинга JSON в {self.stock_file}: {e}")
+            return {str(i): True for i in range(1, 7)}
+        except Exception as e:
+            logger.error(f"Ошибка при чтении {self.stock_file}: {e}", exc_info=True)
+            return {str(i): True for i in range(1, 7)}
+    
+    async def is_variant_available(self, variant_num: int) -> bool:
+        """Проверить, доступен ли вариант букета"""
+        stock = await self.get_stock_status()
+        return stock.get(str(variant_num), True)
+    
+    async def toggle_variant_stock(self, variant_num: int) -> bool:
+        """Переключить доступность варианта букета"""
+        try:
+            async with aiofiles.open(self.stock_file, "r", encoding="utf-8") as f:
+                content = await f.read()
+                if not content or not content.strip():
+                    stock = {str(i): True for i in range(1, 7)}
+                else:
+                    stock = json.loads(content)
+            
+            # Переключаем статус
+            current_status = stock.get(str(variant_num), True)
+            stock[str(variant_num)] = not current_status
+            
+            async with aiofiles.open(self.stock_file, "w", encoding="utf-8") as f:
+                await f.write(json.dumps(stock, ensure_ascii=False, indent=2))
+            
+            logger.info(f"Вариант {variant_num} {'включен' if not current_status else 'выключен'}")
+            return not current_status
+        except Exception as e:
+            logger.error(f"Ошибка при переключении остатков: {e}", exc_info=True)
+            return False
 
 

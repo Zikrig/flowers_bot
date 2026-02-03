@@ -129,22 +129,43 @@ async def show_bouquet_options(message_or_callback, state: FSMContext):
     except Exception as e:
         logger.error(f"Error sending photos: {e}", exc_info=True)
     
-    # Кнопки для выбора букета
+    # Кнопки для выбора букета с учетом остатков
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="1️⃣ Микс", callback_data="bouquet_1"),
-            InlineKeyboardButton(text="2️⃣ Красный", callback_data="bouquet_2")
-        ],
-        [
-            InlineKeyboardButton(text="3️⃣ Жёлтый", callback_data="bouquet_3"),
-            InlineKeyboardButton(text="4️⃣ Белый", callback_data="bouquet_4")
-        ],
-        [
-            InlineKeyboardButton(text="5️⃣ Ж+Ф", callback_data="bouquet_5"),
-            InlineKeyboardButton(text="6️⃣ К+Ж", callback_data="bouquet_6")
-        ]
-    ])
+    stock = await db.get_stock_status()
+    
+    buttons = []
+    button_texts = {
+        1: "1️⃣ Микс",
+        2: "2️⃣ Красный",
+        3: "3️⃣ Жёлтый",
+        4: "4️⃣ Белый",
+        5: "5️⃣ Ж+Ф",
+        6: "6️⃣ К+Ж"
+    }
+    
+    row = []
+    for variant_num in range(1, 7):
+        is_available = stock.get(str(variant_num), True)
+        button_text = button_texts[variant_num]
+        
+        # Если товар недоступен, добавляем красный крестик
+        if not is_available:
+            button_text = f"❌ {button_text}"
+        
+        row.append(InlineKeyboardButton(
+            text=button_text,
+            callback_data=f"bouquet_{variant_num}"
+        ))
+        
+        # Добавляем по 2 кнопки в ряд
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    
+    if row:
+        buttons.append(row)
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     
     if hasattr(message_or_callback, 'message'):
         await message_or_callback.message.answer(text, reply_markup=keyboard)
@@ -177,6 +198,13 @@ async def consent_denied(callback: CallbackQuery):
 async def bouquet_selected(callback: CallbackQuery, state: FSMContext):
     """Обработка выбора букета через кнопку"""
     variant_num = int(callback.data.replace("bouquet_", ""))
+    
+    # Проверяем доступность товара
+    is_available = await db.is_variant_available(variant_num)
+    if not is_available:
+        await callback.answer("❌ Этот товар закончился и недоступен для заказа", show_alert=True)
+        return
+    
     variant = Config.BOUQUET_VARIANTS[variant_num]
     
     await state.update_data(
