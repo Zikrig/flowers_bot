@@ -443,7 +443,7 @@ class GoogleSheets:
             "",  # дата и время готовности
             "",  # Фамилия, Имя
             "",  # @ телеграм
-            "",  # № варианта
+            # "",  # № варианта
             variants_data.get(1, {}).get("tulip_count", ""),  # вариант 1
             variants_data.get(2, {}).get("tulip_count", ""),  # вариант 2
             variants_data.get(3, {}).get("tulip_count", ""),  # вариант 3

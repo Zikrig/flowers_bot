@@ -411,5 +411,92 @@
     ],
     "payment_confirmed_by": 184374602,
     "payment_confirmed_at": "2026-02-03T16:22:00.868691"
+  },
+  "016": {
+    "user_id": 184374602,
+    "first_name": "4",
+    "last_name": "4",
+    "username": "fgriz",
+    "phone": "+79991234567",
+    "bouquets": [
+      {
+        "variant": 1,
+        "variant_name": "Микс",
+        "quantity": 15,
+        "count": 1
+      }
+    ],
+    "pickup_date": "7 марта",
+    "pickup_time": "19:00",
+    "total_price": 1800,
+    "status": "paid",
+    "order_number": "016",
+    "created_at": "2026-02-03T18:50:43.471264",
+    "receipt_file_id": "AgACAgIAAxkBAAIBr2mCGVnbprsvW1lWgDsTKnrmrFtrAAIeDWsbLeARSNKZXnpId_WCAQADAgADeQADOAQ",
+    "receipt_file_type": "photo",
+    "updated_at": [
+      "2026-02-03T18:50:53.133870",
+      "2026-02-03T18:50:54.847754"
+    ],
+    "payment_confirmed_by": 184374602,
+    "payment_confirmed_at": "2026-02-03T18:50:54.841324"
+  },
+  "017": {
+    "user_id": 184374602,
+    "first_name": "4",
+    "last_name": "4",
+    "username": "",
+    "phone": "+79991234567",
+    "bouquets": [
+      {
+        "variant": 1,
+        "variant_name": "Микс",
+        "quantity": 15,
+        "count": 1
+      }
+    ],
+    "pickup_date": "7 марта",
+    "pickup_time": "17:00",
+    "total_price": 1800,
+    "status": "paid",
+    "order_number": "017",
+    "created_at": "2026-02-03T18:53:01.754695",
+    "receipt_file_id": "AgACAgIAAxkBAAIBwWmCGeRKc_jIQPdUh_4gkFkV8Zh-AAI4DWsbLeARSLnMqaHo2fYwAQADAgADeQADOAQ",
+    "receipt_file_type": "photo",
+    "updated_at": [
+      "2026-02-03T18:53:11.962894",
+      "2026-02-03T18:53:13.489771"
+    ],
+    "payment_confirmed_by": 184374602,
+    "payment_confirmed_at": "2026-02-03T18:53:13.485515"
+  },
+  "018": {
+    "user_id": 184374602,
+    "first_name": "4",
+    "last_name": "4",
+    "username": "",
+    "phone": "+79991234567",
+    "bouquets": [
+      {
+        "variant": 6,
+        "variant_name": "Красный + жёлтый",
+        "quantity": 15,
+        "count": 1
+      }
+    ],
+    "pickup_date": "8 марта",
+    "pickup_time": "15:00",
+    "total_price": 1800,
+    "status": "paid",
+    "order_number": "018",
+    "created_at": "2026-02-03T18:54:38.711139",
+    "receipt_file_id": "AgACAgIAAxkBAAIB02mCGkasKwxglWoTs1_RIjzOKmsAAzoNaxst4BFIL-ntrOuBkP4BAAMCAAN5AAM4BA",
+    "receipt_file_type": "photo",
+    "updated_at": [
+      "2026-02-03T18:54:50.118390",
+      "2026-02-03T18:54:52.493615"
+    ],
+    "payment_confirmed_by": 184374602,
+    "payment_confirmed_at": "2026-02-03T18:54:52.487869"
   }
 }
