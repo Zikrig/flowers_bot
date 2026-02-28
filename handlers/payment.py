@@ -28,91 +28,129 @@ def _get_order_lock(order_number: str) -> asyncio.Lock:
     return _order_locks[order_number]
 
 
-@router.callback_query(F.data == "send_receipt", StateFilter(OrderStates.waiting_payment))
-async def send_receipt_button(callback: CallbackQuery, state: FSMContext):
-    """Обработка нажатия кнопки 'Отправить чек'"""
+MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 МБ
+
+
+def _get_file_from_message(message: Message):
+    """Извлечь file_id и file_type из сообщения (фото или документ)."""
+    if message.photo:
+        return message.photo[-1].file_id, "photo"
+    if message.document:
+        return message.document.file_id, "document"
+    return None, None
+
+
+async def _check_order_can_send_receipt(state: FSMContext, db: Database):
+    """Проверить, что заказ есть и ещё ожидает оплату (не отменён). Возвращает (order_number, order) или (None, None)."""
+    data = await state.get_data()
+    order_number = data.get("order_number")
+    if not order_number:
+        return None, None
+    order = await db.get_order(order_number)
+    if not order or order.get("status") != "pending_payment":
+        return None, order
+    return order_number, order
+
+
+@router.message(StateFilter(OrderStates.waiting_payment), F.photo | F.document)
+async def file_in_waiting_payment(message: Message, state: FSMContext):
+    """Любой файл в состоянии ожидания оплаты — спрашиваем «Это чек? Да/Нет»."""
+    order_number, order = await _check_order_can_send_receipt(state, db)
+    if not order_number:
+        if order and order.get("status") == "cancelled":
+            await state.clear()
+            await message.answer(
+                "Время оплаты истекло, заказ отменён. Хотите оформить новый? Нажмите /start"
+            )
+        else:
+            await message.answer("Ошибка: заказ не найден или уже обработан.")
+        return
+
+    file_id, file_type = _get_file_from_message(message)
+    if message.document and message.document.file_size and message.document.file_size > MAX_FILE_SIZE:
+        await message.answer(
+            f"❌ Файл слишком большой. Максимальный размер: 20 МБ"
+        )
+        return
+    if message.photo:
+        try:
+            fi = await message.bot.get_file(file_id)
+            if fi.file_size and fi.file_size > MAX_FILE_SIZE:
+                await message.answer("❌ Файл слишком большой. Максимальный размер: 20 МБ")
+                return
+        except Exception:
+            pass
+
+    await state.update_data(pending_receipt_file_id=file_id, pending_receipt_file_type=file_type)
     await state.set_state(OrderStates.waiting_receipt)
-    
-    await callback.message.answer(
-        "📎 Отправьте фотографию или файл с квитанцией об оплате.\n"
-        "Максимальный размер файла: 20 МБ"
-    )
-    await callback.answer()
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Да", callback_data="receipt_yes")],
+        [InlineKeyboardButton(text="Нет", callback_data="receipt_no")]
+    ])
+    await message.answer("Это чек?", reply_markup=keyboard)
 
 
 @router.message(StateFilter(OrderStates.waiting_receipt), F.photo | F.document)
-async def receipt_received(message: Message, state: FSMContext):
-    """Обработка получения чека (фото или файл)"""
+async def file_in_waiting_receipt(message: Message, state: FSMContext):
+    """В состоянии «ожидание Да/Нет» пользователь отправил новый файл — заменяем и снова спрашиваем."""
+    order_number, order = await _check_order_can_send_receipt(state, db)
+    if not order_number:
+        if order and order.get("status") == "cancelled":
+            await state.clear()
+            await message.answer("Время оплаты истекло, заказ отменён. Нажмите /start для нового заказа.")
+        else:
+            await state.clear()
+            await message.answer("Заказ не найден или уже обработан.")
+        return
+
+    file_id, file_type = _get_file_from_message(message)
+    if message.document and message.document.file_size and message.document.file_size > MAX_FILE_SIZE:
+        await message.answer("❌ Файл слишком большой. Максимальный размер: 20 МБ")
+        return
+    if message.photo:
+        try:
+            fi = await message.bot.get_file(file_id)
+            if fi.file_size and fi.file_size > MAX_FILE_SIZE:
+                await message.answer("❌ Файл слишком большой. Максимальный размер: 20 МБ")
+                return
+        except Exception:
+            pass
+
+    await state.update_data(pending_receipt_file_id=file_id, pending_receipt_file_type=file_type)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Да", callback_data="receipt_yes")],
+        [InlineKeyboardButton(text="Нет", callback_data="receipt_no")]
+    ])
+    await message.answer("Это чек?", reply_markup=keyboard)
+
+
+@router.callback_query(F.data == "receipt_yes", StateFilter(OrderStates.waiting_receipt))
+async def receipt_yes(callback: CallbackQuery, state: FSMContext):
+    """Пользователь подтвердил: да, это чек — отправляем админам и перестаём слушать."""
     data = await state.get_data()
     order_number = data.get("order_number")
-    
-    if not order_number:
-        await message.answer("Ошибка: номер заказа не найден.")
+    file_id = data.get("pending_receipt_file_id")
+    file_type = data.get("pending_receipt_file_type")
+
+    if not order_number or not file_id or not file_type:
+        await callback.answer("Ошибка: данные чека не найдены.", show_alert=True)
         await state.set_state(OrderStates.waiting_payment)
         return
-    
+
     order = await db.get_order(order_number)
-    if not order:
-        await message.answer("Ошибка: заказ не найден.")
-        await state.set_state(OrderStates.waiting_payment)
+    if not order or order.get("status") != "pending_payment":
+        await callback.answer("Заказ уже обработан или отменён.", show_alert=True)
+        await state.clear()
         return
-    
-    # Проверка размера файла (20 МБ = 20 * 1024 * 1024 байт)
-    MAX_FILE_SIZE = 20 * 1024 * 1024
-    
-    file_id = None
-    file_type = None
-    
-    if message.photo:
-        # Обработка фото
-        photo = message.photo[-1]  # Берем фото наибольшего размера
-        file_id = photo.file_id
-        file_type = "photo"
-        
-        # Проверяем размер фото
-        file_info = await message.bot.get_file(file_id)
-        if file_info.file_size and file_info.file_size > MAX_FILE_SIZE:
-            await message.answer(
-                f"❌ Файл слишком большой ({file_info.file_size / 1024 / 1024:.1f} МБ). "
-                "Максимальный размер: 20 МБ"
-            )
-            return
-    
-    elif message.document:
-        # Обработка документа
-        document = message.document
-        file_id = document.file_id
-        file_type = "document"
-        
-        # Проверяем размер файла
-        if document.file_size and document.file_size > MAX_FILE_SIZE:
-            await message.answer(
-                f"❌ Файл слишком большой ({document.file_size / 1024 / 1024:.1f} МБ). "
-                "Максимальный размер: 20 МБ"
-            )
-            return
-    
-    if not file_id:
-        await message.answer("Пожалуйста, отправьте фотографию или файл с квитанцией.")
-        return
-    
-    # Сохраняем file_id чека в заказе
+
     await db.update_order_status(order_number, "pending_payment", receipt_file_id=file_id, receipt_file_type=file_type)
-    
-    # Формируем текст о букетах отдельно
+
     bouquets_list = []
     for b in order.get('bouquets', []):
         count = b['count']
-        if count == 1:
-            count_text = 'букет'
-        elif count in [2, 3, 4]:
-            count_text = 'букета'
-        else:
-            count_text = 'букетов'
+        count_text = 'букет' if count == 1 else ('букета' if count in [2, 3, 4] else 'букетов')
         bouquets_list.append(f"№{b['variant']} «{b['variant_name']}» - {b['quantity']} шт. - {count} {count_text}")
     bouquets_str = ', '.join(bouquets_list)
-    
-    # Отправляем администраторам
     admin_text = (
         f"📋 Новый заказ требует подтверждения оплаты:\n\n"
         f"🔹 Номер заказа: {order_number}\n"
@@ -123,78 +161,56 @@ async def receipt_received(message: Message, state: FSMContext):
         f"🔹 Самовывоз: {order.get('pickup_date')} в {order.get('pickup_time')}\n\n"
         f"Проверьте оплату и подтвердите её."
     )
-    
-    # Проверяем наличие админов
-    if not Config.ADMIN_IDS:
-        logger.error("ADMIN_IDS пустой! Сообщения админам не будут отправлены.")
-        await message.answer("⚠️ Ошибка: администраторы не настроены. Обратитесь к разработчику.")
-    else:
-        logger.info(f"Отправка сообщений {len(Config.ADMIN_IDS)} админам: {Config.ADMIN_IDS}")
-    
+
     sent_count = 0
     for admin_id in Config.ADMIN_IDS:
         try:
-            logger.info(f"Попытка отправить сообщение админу {admin_id}")
-            
             if file_type == "photo":
-                sent_msg = await message.bot.send_photo(
-                    admin_id,
-                    photo=file_id,
-                    caption=admin_text
-                )
-                logger.info(f"Фото отправлено админу {admin_id}, message_id={sent_msg.message_id}")
+                await callback.bot.send_photo(admin_id, photo=file_id, caption=admin_text)
             else:
-                sent_msg = await message.bot.send_document(
-                    admin_id,
-                    document=file_id,
-                    caption=admin_text
-                )
-                logger.info(f"Документ отправлен админу {admin_id}, message_id={sent_msg.message_id}")
-            
-            # Кнопки для администратора
+                await callback.bot.send_document(admin_id, document=file_id, caption=admin_text)
             admin_keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(
-                        text="✅ Подтвердить оплату",
-                        callback_data=f"admin_confirm_{order_number}"
-                    ),
-                    InlineKeyboardButton(
-                        text="❌ Отклонить",
-                        callback_data=f"admin_reject_{order_number}"
-                    )
+                    InlineKeyboardButton(text="✅ Подтвердить оплату", callback_data=f"admin_confirm_{order_number}"),
+                    InlineKeyboardButton(text="❌ Отклонить", callback_data=f"admin_reject_{order_number}")
                 ]
             ])
-            keyboard_msg = await message.bot.send_message(
-                admin_id,
-                f"Заказ №{order_number}",
-                reply_markup=admin_keyboard
-            )
-            logger.info(f"Кнопки отправлены админу {admin_id}, message_id={keyboard_msg.message_id}")
+            await callback.bot.send_message(admin_id, f"Заказ №{order_number}", reply_markup=admin_keyboard)
             sent_count += 1
-            
         except Exception as e:
-            logger.error(f"Ошибка при отправке сообщения админу {admin_id}: {e}", exc_info=True)
-    
-    if sent_count == 0:
-        logger.error(f"Не удалось отправить сообщения ни одному админу из {len(Config.ADMIN_IDS)}")
+            logger.error(f"Ошибка при отправке админу {admin_id}: {e}", exc_info=True)
+
+    if sent_count == 0 and Config.ADMIN_IDS:
+        await callback.answer("Не удалось отправить чек админам.", show_alert=True)
     else:
-        logger.info(f"Сообщения успешно отправлены {sent_count} из {len(Config.ADMIN_IDS)} админов")
-    
-    await message.answer(
-        "✅ Чек получен! Мы проверим поступление средств и подтвердим оплату."
-    )
-    
-    # Возвращаемся в состояние ожидания оплаты
+        await callback.answer("Чек отправлен!", show_alert=False)
+
+    await state.update_data(pending_receipt_file_id=None, pending_receipt_file_type=None)
     await state.set_state(OrderStates.waiting_payment)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer("✅ Чек получен! Мы проверим поступление средств и подтвердим оплату.")
+
+
+@router.callback_query(F.data == "receipt_no", StateFilter(OrderStates.waiting_receipt))
+async def receipt_no(callback: CallbackQuery, state: FSMContext):
+    """Пользователь сказал «Нет» — перестаём слушать этот файл, ждём новый."""
+    await state.update_data(pending_receipt_file_id=None, pending_receipt_file_type=None)
+    await state.set_state(OrderStates.waiting_payment)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer("Хорошо. Отправьте чек, когда будете готовы.")
+    await callback.answer()
 
 
 @router.message(StateFilter(OrderStates.waiting_receipt))
 async def invalid_receipt_format(message: Message):
-    """Обработка некорректного формата чека"""
-    await message.answer(
-        "Пожалуйста, отправьте фотографию или файл с квитанцией об оплате.\n"
-        "Максимальный размер файла: 20 МБ"
-    )
+    """В состоянии ожидания Да/Нет пользователь написал текст вместо нажатия кнопки."""
+    await message.answer("Выберите «Да» или «Нет» под сообщением выше.")
 
 
 @router.callback_query(F.data.startswith("admin_confirm_"))
