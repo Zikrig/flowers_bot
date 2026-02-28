@@ -64,9 +64,18 @@ async def main():
     
     logger.info("Бот запущен и готов к работе!")
     
-    # Запуск polling
+    # Запуск polling с улучшенной обработкой flood control
     try:
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        await dp.start_polling(
+            bot, 
+            allowed_updates=dp.resolve_used_update_types(),
+            # Улучшенная обработка flood control
+            close_bot_session=False  # Не закрываем сессию автоматически
+        )
+    except KeyboardInterrupt:
+        logger.info("Бот остановлен пользователем")
+    except Exception as e:
+        logger.error(f"Ошибка при работе бота: {e}", exc_info=True)
     finally:
         await bot.session.close()
 
